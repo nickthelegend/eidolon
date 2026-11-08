@@ -64,6 +64,9 @@ importers:
       '@eidolon/core':
         specifier: workspace:*
         version: link:../core
+      '@mysten/sui':
+        specifier: ^2.37.0
+        version: 2.39.1(typescript@5.9.3)
       dotenv:
         specifier: ^17.2.3
         version: 17.4.2
