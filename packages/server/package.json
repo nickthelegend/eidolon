@@ -1,0 +1,1 @@
+{"name":"@eidolon/server","version":"0.1.0","type":"module","scripts":{"dev":"tsx watch src/index.ts","build":"tsc -p tsconfig.json"},"dependencies":{"@eidolon/core":"workspace:*","dotenv":"^17.2.3"},"devDependencies":{"typescript":"^5.9.3","tsx":"^4.20.6","@types/node":"^24.10.0"}}
