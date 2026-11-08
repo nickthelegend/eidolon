@@ -1,14 +1,14 @@
 import 'dotenv/config';
 import { createServer, type ServerResponse } from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { chain, markets, plan, memoryFor, ghostDecision, habitProfile, type Context, type Hit, type TradeMemory } from '@eidolon/core';
+import { chain, markets, plan, memoryFor, ghostDecision, ghostStrike, habitProfile, type Context, type Hit, type TradeMemory } from '@eidolon/core';
 import { toBase64 } from '@mysten/sui/utils';
 import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { cost } from '@mysten/deepbook-v3/predict';
 
 type Leg = { digest: string; recordId: string; orderId: string; cost: number; premium: number; payout?: number; pnl?: number; fillDigest?: string; payoutDigest?: string };
-type Round = { digest: string; player: string; marketId: string; expiryMs: number; cadence: 1 | 5; side: 'up' | 'down'; strike: number; size: number; recordId: string; context: Context; status: string; playerLeg?: Leg; ghost?: { side: 'up' | 'down'; size: number; recalledBlobIds: string[]; profile: ReturnType<typeof habitProfile>; line?: string; leg?: Leg; status: string }; settlement?: number; memoryBlobId?: string; createdAt: string };
+type Round = { digest: string; player: string; marketId: string; expiryMs: number; cadence: 1 | 5; side: 'up' | 'down'; strike: number; size: number; recordId: string; context: Context; status: string; playerLeg?: Leg; ghost?: { side: 'up' | 'down'; size: number; strike?: number; exactMirror?: boolean; recalledBlobIds: string[]; profile: ReturnType<typeof habitProfile>; line?: string; leg?: Leg; status: string }; settlement?: number; memoryBlobId?: string; createdAt: string };
 const dbPath = 'data/rounds.json';
 let rounds: Round[] = [];
 try { rounds = JSON.parse(await readFile(dbPath, 'utf8')); } catch { /* first run */ }
@@ -173,7 +173,11 @@ async function placeGhost(round: Round, hits: Hit[]) {
   if (await c.predict.read.balance(owner) < decision.size) { round.ghost.status = 'ghost Predict balance too low'; return; }
   const active = (await marketList()).find(m => m.id === round.marketId);
   if (!active || active.expiryMs - Date.now() < 10_000) { round.ghost.status = 'same expiry cutoff passed'; return; }
-  const { descriptor, quote } = await plan(owner, active, decision.side, decision.size, round.strike);
+  const pricer = await c.predict.read.pricer({ underlying: 'BTC', expiryMs: active.expiryMs });
+  const pick = ghostStrike(pricer, decision.side, round.strike, active.admissionTickSize);
+  if (!pick) { round.ghost.status = 'no strike inside the entry band for the opposite side'; return; }
+  round.ghost.strike = pick.strike; round.ghost.exactMirror = pick.exact;
+  const { descriptor, quote } = await plan(owner, active, decision.side, decision.size, pick.strike);
   if (!quote.accepting) { round.ghost.status = `plan refused: ${quote.refusal}`; return; }
   const { transaction } = await c.predict.tx.enqueuePlan(owner, descriptor, quote);
   transaction.setSender(owner);
@@ -210,7 +214,7 @@ async function settle(round: Round, c: ReturnType<typeof chain>) {
         for (const leg of legs) { const computed = Number(cost.settledPayout(BigInt(leg.orderId), settlement.settlementPriceRaw, settlement.tickSizeRaw)) / 1e6; if (Math.abs(computed - (leg.payout ?? 0)) > 0.000001) throw new Error('Settlement event differs from contract payout math'); }
         round.status = 'payout verified'; await save();
         if (!round.memoryBlobId && round.playerLeg) {
-          const memory: TradeMemory = { kind: 'round', player: round.player, cadence: round.cadence, side: round.side, strike: round.strike, distance: round.context.strikeDistance, size: round.size, premium: round.playerLeg.premium, context: round.context, hit: (round.playerLeg.payout ?? 0) > 0, pnl: round.playerLeg.pnl ?? 0, fillDigest: round.playerLeg.fillDigest ?? '', ghost: round.ghost?.leg ? { side: round.ghost.side, size: round.ghost.size, pnl: round.ghost.leg.pnl ?? 0, fillDigest: round.ghost.leg.fillDigest ?? '' } : undefined, createdAt: new Date().toISOString() };
+          const memory: TradeMemory = { kind: 'round', player: round.player, cadence: round.cadence, side: round.side, strike: round.strike, distance: round.context.strikeDistance, size: round.size, premium: round.playerLeg.premium, context: round.context, hit: (round.playerLeg.payout ?? 0) > 0, pnl: round.playerLeg.pnl ?? 0, fillDigest: round.playerLeg.fillDigest ?? '', ghost: round.ghost?.leg ? { side: round.ghost.side, size: round.ghost.size, strike: round.ghost.strike, pnl: round.ghost.leg.pnl ?? 0, fillDigest: round.ghost.leg.fillDigest ?? '' } : undefined, createdAt: new Date().toISOString() };
           round.memoryBlobId = await memoryFor(round.player).remember(memory); await save();
           const count = rounds.filter(r => r.player === round.player && r.memoryBlobId).length;
           if (count % 5 === 0) { const recent = rounds.filter(r => r.player === round.player && r.playerLeg?.pnl != null).slice(-5); const up = recent.filter(r => r.side === 'up'); await memoryFor(round.player).remember({ kind: 'analysis', player: round.player, line: `Last ${recent.length} trades: UP ${up.length}, wins ${recent.filter(r => (r.playerLeg?.pnl ?? 0) > 0).length}.`, createdAt: new Date().toISOString() }); }

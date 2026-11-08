@@ -1,6 +1,6 @@
 export type Side = 'up' | 'down';
 export type Context = { cadence: 1 | 5; strikeDistance: number; move60s: number | null; move5m: number | null; hourUtc: number };
-export type TradeMemory = { kind: 'round'; player: string; cadence: 1 | 5; side: Side; strike: number; distance: number; size: number; premium: number; context: Context; hit: boolean; pnl: number; fillDigest: string; ghost?: { side: Side; size: number; pnl: number; fillDigest: string }; createdAt: string };
+export type TradeMemory = { kind: 'round'; player: string; cadence: 1 | 5; side: Side; strike: number; distance: number; size: number; premium: number; context: Context; hit: boolean; pnl: number; fillDigest: string; ghost?: { side: Side; size: number; strike?: number; pnl: number; fillDigest: string }; createdAt: string };
 export type HabitMemory = { kind: 'analysis'; player: string; line: string; createdAt: string };
 export type Memory = TradeMemory | HabitMemory;
 export type Hit = { blobId: string; memory: Memory; distance?: number };
@@ -40,4 +40,33 @@ export function ghostDecision(playerSide: Side, hits: Hit[], context: Context, m
   if (!profile.recalled) throw new Error('Ghost requires recalled trade memories');
   const size = Math.min(maxUsdc, Math.max(1, Math.round(profile.averageSize * (1 + Math.max(0, 0.5 - profile.hitRate) * 2) * 100) / 100));
   return { side: playerSide === 'up' ? 'down' as const : 'up' as const, size, profile, blobIds: hits.filter(h => h.memory.kind === 'round').map(h => h.blobId) };
+}
+
+/**
+ * DeepBook Predict admits a new one-sided mint only while its win probability sits inside the
+ * entry band (observed on mainnet Nov 8 2026: 0.15 to 0.5). The exact opposite of a player's bet
+ * at the same strike has probability 1 - p, so it is admissible only when p is exactly 0.5.
+ */
+export const ENTRY_BAND = { min: 0.15, max: 0.5 } as const;
+
+export type StrikePricer = { probability(strike: number, side: Side): number; strikeAtProbability(pUp: number): number | null };
+export type GhostStrike = { strike: number; probability: number; exact: boolean };
+
+/**
+ * The strike the ghost bets at. First choice is the exact mirror of the player's strike. When
+ * the band refuses it, the ghost takes the nearest strike on the same side of the market that is
+ * just inside the band: for a DOWN ghost the highest strike with P(down) <= max, for an UP ghost
+ * the lowest strike with P(up) <= max. That leaves a dead zone between the two strikes where both
+ * lose, which the UI shows. Null when no admissible strike exists (the round goes ghost-less).
+ */
+export function ghostStrike(pricer: StrikePricer, ghostSide: Side, playerStrike: number, tick: number, band = ENTRY_BAND): GhostStrike | null {
+  const inBand = (p: number) => p >= band.min && p <= band.max;
+  const exact = pricer.probability(playerStrike, ghostSide);
+  if (inBand(exact)) return { strike: playerStrike, probability: exact, exact: true };
+  const target = ghostSide === 'down' ? 1 - (band.max - 0.01) : band.max - 0.01;
+  const raw = pricer.strikeAtProbability(target);
+  if (raw == null || !Number.isFinite(raw) || tick <= 0) return null;
+  const strike = ghostSide === 'down' ? Math.floor(raw / tick) * tick : Math.ceil(raw / tick) * tick;
+  const probability = pricer.probability(strike, ghostSide);
+  return inBand(probability) ? { strike, probability, exact: false } : null;
 }
