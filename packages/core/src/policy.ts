@@ -9,7 +9,16 @@ export type HabitProfile = { recalled: number; matched: number; upBias: number; 
 export function encodeMemory(memory: Memory): string { return `EIDOLON_V1 ${JSON.stringify(memory)}`; }
 export function decodeMemory(text: string): Memory | null {
   if (!text.startsWith('EIDOLON_V1 ')) return null;
-  try { const value = JSON.parse(text.slice(11)); return value?.kind === 'round' || value?.kind === 'analysis' ? value as Memory : null; } catch { return null; }
+  try {
+    const value = JSON.parse(text.slice(11));
+    if (value?.kind === 'analysis') return typeof value.player === 'string' && typeof value.line === 'string' && typeof value.createdAt === 'string' ? value as HabitMemory : null;
+    if (value?.kind !== 'round') return null;
+    const numbers = [value.strike, value.distance, value.size, value.premium, value.pnl, value.context?.strikeDistance, value.context?.hourUtc];
+    if (numbers.some(n => typeof n !== 'number' || !Number.isFinite(n)) || value.size <= 0 || value.premium < 0) return null;
+    if (![1, 5].includes(value.cadence) || !['up', 'down'].includes(value.side) || typeof value.hit !== 'boolean' || typeof value.player !== 'string' || typeof value.fillDigest !== 'string' || typeof value.createdAt !== 'string') return null;
+    if (value.context.cadence !== value.cadence || (value.context.move60s != null && !Number.isFinite(value.context.move60s)) || (value.context.move5m != null && !Number.isFinite(value.context.move5m))) return null;
+    return value as TradeMemory;
+  } catch { return null; }
 }
 
 export function contextQuery(c: Context): string {
@@ -19,7 +28,7 @@ export function contextQuery(c: Context): string {
 
 export function habitProfile(hits: Hit[], context: Context): HabitProfile {
   const all = hits.filter((h): h is Hit & { memory: TradeMemory } => h.memory.kind === 'round');
-  const matched = all.filter(h => h.memory.cadence === context.cadence && (h.memory.context.move60s == null || context.move60s == null || Math.sign(h.memory.context.move60s) === Math.sign(context.move60s)));
+  const matched = all.filter(h => h.memory.cadence === context.cadence && (h.memory.context.move60s == null || context.move60s == null || Math.sign(h.memory.context.move60s) === Math.sign(context.move60s)) && Math.abs(h.memory.context.strikeDistance - context.strikeDistance) <= 20 && Math.min(Math.abs(h.memory.context.hourUtc - context.hourUtc), 24 - Math.abs(h.memory.context.hourUtc - context.hourUtc)) <= 3);
   const use = matched.length ? matched : all;
   const avg = (get: (m: TradeMemory) => number) => use.length ? use.reduce((n,h) => n + get(h.memory), 0) / use.length : 0;
   return { recalled: all.length, matched: matched.length, upBias: avg(m => m.side === 'up' ? 1 : 0), averageDistance: avg(m => m.distance), averageSize: avg(m => m.size), hitRate: avg(m => m.hit ? 1 : 0) };

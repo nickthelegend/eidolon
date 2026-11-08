@@ -15,6 +15,7 @@ try { rounds = JSON.parse(await readFile(dbPath, 'utf8')); } catch { /* first ru
 const clients = new Set<ServerResponse>();
 const priceSamples: { at: number; forward: number }[] = [];
 const prepared = new Map<string, { player: string; marketId: string; side: 'up' | 'down'; strike: number; size: number; expiryMs: number; createdAt: number }>();
+const preparedFunding = new Map<string, number>();
 const executed = new Map<string, NonNullable<ReturnType<typeof prepared.get>>>();
 function broadcast(value: unknown) { for (const res of clients) res.write(`data: ${JSON.stringify(value)}\n\n`); }
 async function save() { await mkdir('data', { recursive: true }); await writeFile(dbPath, JSON.stringify(rounds, null, 2)); broadcast({ type: 'rounds', rounds }); }
@@ -26,7 +27,7 @@ function context(cadence: 1 | 5, strike: number, spot: number): Context {
 }
 async function body(req: AsyncIterable<Uint8Array>) { let s = ''; for await (const chunk of req) { s += chunk.toString(); if (s.length > 10_000) throw new Error('Body too large'); } return JSON.parse(s); }
 async function marketList() { const list = (await markets()).markets; const forward = list.find(x => x.forward)?.forward; if (forward != null) { priceSamples.push({ at: Date.now(), forward }); while (priceSamples.length && priceSamples[0].at < Date.now() - 360_000) priceSamples.shift(); } return list; }
-function safeError(e: unknown) { const s = String(e); return s.replace(/(TATUM_API_KEY|MEMWAL_MAINNET_KEY|MEMWAL_MAINNET_ACCOUNT_ID|EIDOLON_GHOST_KEY|OPENROUTER_API_KEY)=\S+/g, '$1=[redacted]'); }
+function safeError(e: unknown) { let s = String(e); for (const name of ['TATUM_API_KEY', 'MEMWAL_MAINNET_KEY', 'MEMWAL_MAINNET_ACCOUNT_ID', 'EIDOLON_GHOST_KEY', 'OPENROUTER_API_KEY']) { const value = process.env[name]; if (value) s = s.replaceAll(value, '[redacted]'); } return s.replace(/(TATUM_API_KEY|MEMWAL_MAINNET_KEY|MEMWAL_MAINNET_ACCOUNT_ID|EIDOLON_GHOST_KEY|OPENROUTER_API_KEY)=\S+/g, '$1=[redacted]'); }
 
 const server = createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'content-type' }); res.end(); return; }
@@ -43,15 +44,32 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/markets') { const result = await markets(); const forward = result.markets.find(x => x.forward)?.forward; if (forward != null) { priceSamples.push({ at: Date.now(), forward }); while (priceSamples.length && priceSamples[0].at < Date.now() - 360_000) priceSamples.shift(); } respond(res, 200, result); return; }
     if (url.pathname === '/rounds' && req.method === 'GET') { respond(res, 200, rounds); return; }
     if (url.pathname === '/leaderboard') { respond(res, 200, Object.values(rounds.reduce<Record<string, { player: string; rounds: number; settled: number; playerPnl: number; ghostPnl: number; wins1m: number; played1m: number; wins5m: number; played5m: number }>>((acc, r) => { const p = acc[r.player] ??= { player: r.player, rounds: 0, settled: 0, playerPnl: 0, ghostPnl: 0, wins1m: 0, played1m: 0, wins5m: 0, played5m: 0 }; p.rounds++; if (r.status === 'settled') { p.settled++; p.playerPnl += r.playerLeg?.pnl ?? 0; p.ghostPnl += r.ghost?.leg?.pnl ?? 0; if (r.cadence === 1) { p.played1m++; if ((r.playerLeg?.pnl ?? 0) > 0) p.wins1m++; } else { p.played5m++; if ((r.playerLeg?.pnl ?? 0) > 0) p.wins5m++; } } return acc; }, {}))); return; }
-    if (url.pathname.startsWith('/ghost/')) { const address = url.pathname.slice(7); const hits = await memoryFor(address).recall(context(1, 0, 0)); respond(res, 200, { hits, profile: habitProfile(hits, context(1, 0, 0)) }); return; }
+    if (url.pathname.startsWith('/ghost/')) { const address = url.pathname.slice(7); if (!/^0x[0-9a-f]{64}$/i.test(address)) throw new Error('Invalid player address'); const hits = await memoryFor(address).recall(context(1, 0, 0)); respond(res, 200, { hits, profile: habitProfile(hits, context(1, 0, 0)) }); return; }
+    if (url.pathname === '/fund' && req.method === 'POST') {
+      const input = await body(req);
+      if (!/^0x[0-9a-f]{64}$/i.test(input.owner)) throw new Error('Invalid player address');
+      const amount = Number(input.amount);
+      if (!Number.isFinite(amount) || amount < 1) throw new Error('Deposit at least 1 USDC');
+      const c = chain(); const transaction = c.predict.tx.deposit(input.owner, amount, { create: input.create === true });
+      transaction.setSender(input.owner);
+      const bytes = await transaction.build({ client: c.client }); const encoded = toBase64(bytes);
+      const dry = c.client instanceof SuiJsonRpcClient
+        ? await c.client.dryRunTransactionBlock({ transactionBlock: bytes }).then(x => ({ status: x.effects.status.status, error: x.effects.status.error ?? null }))
+        : await c.client.core.simulateTransaction({ transaction: bytes, include: { effects: true } }).then(x => ({ status: x.$kind === 'Transaction' ? 'success' : 'failure', error: x.$kind === 'FailedTransaction' ? x.FailedTransaction.status.error?.message : null }));
+      if (dry.status === 'success') preparedFunding.set(encoded, Date.now());
+      respond(res, 200, { dryRun: dry, transaction: dry.status === 'success' ? encoded : null, rpc: c.rpc, mode: process.env.EIDOLON_ALLOW_MAINNET === 'I_ACKNOWLEDGE_REAL_USDC' ? 'live writes enabled' : 'dry-run only' }); return;
+    }
     if (url.pathname === '/plan' && req.method === 'POST') {
       const input = await body(req);
       const list = await marketList(); const m = list.find(x => x.id === input.marketId);
       if (!m) throw new Error('Market is not active');
       if (!/^0x[0-9a-f]{64}$/i.test(input.owner)) throw new Error('Invalid player address');
       if (input.side !== 'up' && input.side !== 'down') throw new Error('Choose UP or DOWN');
-      const amount = Number(input.amount); const strike = input.strike == null ? m.suggestedStrike ?? undefined : Number(input.strike);
+      const amount = Number(input.amount); const strike = input.strike == null ? (input.side === 'down' ? m.suggestedStrikeDown : m.suggestedStrike) ?? undefined : Number(input.strike);
       const { descriptor, quote, c } = await plan(input.owner, m, input.side, amount, strike);
+      let mirror: string;
+      try { const opposite = input.side === 'up' ? 'down' : 'up'; const view = await c.predict.read.planMint(input.owner, { underlying: 'BTC', expiryMs: m.expiryMs, marketId: m.id, side: opposite, strike: descriptor.strike as number | 'reference' }, { amount: Math.max(2, amount), slippageCents: 5 }); mirror = view.refusal === 'entry-band' ? 'entry-band blocked' : 'entry band admissible'; }
+      catch (e) { mirror = String(e).includes('entry-band') || String(e).includes('entry band') ? 'entry-band blocked' : `unverified: ${safeError(e)}`; }
       let dryRun: unknown = null; let transaction: string | null = null;
       if (quote.accepting) {
         const built = await c.predict.tx.enqueuePlan(input.owner, descriptor, quote);
@@ -67,19 +85,19 @@ const server = createServer(async (req, res) => {
           dryRun = { status: result.$kind === 'Transaction' ? { status: 'success' } : { status: 'failure', error: result.FailedTransaction.status.error?.message }, events: result.$kind === 'Transaction' ? result.Transaction.events?.length ?? 0 : 0, rpc: c.rpc };
         }
       }
-      respond(res, 200, { marketId: m.id, side: input.side, strike: strike ?? m.referencePrice, amount, accepting: quote.accepting, refusal: quote.refusal, quote: { potentialPayout: quote.potentialPayout, orderFee: quote.orderFee, totalDebit: quote.totalDebit, expectedDebit: quote.expectedDebit, timing: { cutoffMs: String(quote.timing.cutoffMs) } }, dryRun, transaction, mode: process.env.EIDOLON_ALLOW_MAINNET === 'I_ACKNOWLEDGE_REAL_USDC' ? 'live writes enabled' : 'dry-run only', rpc: c.rpc }); return;
+      respond(res, 200, { marketId: m.id, side: input.side, strike: strike ?? m.referencePrice, amount, accepting: quote.accepting, refusal: quote.refusal, mirror, quote: { potentialPayout: quote.potentialPayout, orderFee: quote.orderFee, totalDebit: quote.totalDebit, expectedDebit: quote.expectedDebit, timing: { cutoffMs: String(quote.timing.cutoffMs) } }, dryRun, transaction, mode: process.env.EIDOLON_ALLOW_MAINNET === 'I_ACKNOWLEDGE_REAL_USDC' ? 'live writes enabled' : 'dry-run only', rpc: c.rpc }); return;
     }
     if (url.pathname === '/execute' && req.method === 'POST') {
       if (process.env.EIDOLON_ALLOW_MAINNET !== 'I_ACKNOWLEDGE_REAL_USDC') throw new Error('Dry-run only: mainnet writes disabled');
       if (!process.env.MEMWAL_MAINNET_KEY || !process.env.MEMWAL_MAINNET_ACCOUNT_ID) throw new Error('Setup required: Walrus Memory before live trading');
       if (!process.env.EIDOLON_GHOST_KEY) throw new Error('Setup required: EIDOLON_GHOST_KEY before live trading');
-      const input = await body(req); const p = prepared.get(input.bytes);
-      if (!p || Date.now() - p.createdAt > 30_000) throw new Error('Transaction was not recently prepared by Eidolon');
-      prepared.delete(input.bytes);
+      const input = await body(req); const p = prepared.get(input.bytes); const fundingAt = preparedFunding.get(input.bytes);
+      if ((!p || Date.now() - p.createdAt > 30_000) && (!fundingAt || Date.now() - fundingAt > 60_000)) throw new Error('Transaction was not recently prepared by Eidolon');
+      prepared.delete(input.bytes); preparedFunding.delete(input.bytes);
       const c = chain(); if (!(c.client instanceof SuiJsonRpcClient)) throw new Error('Tatum JSON-RPC required for mainnet writes');
       const tx = await c.client.executeTransactionBlock({ transactionBlock: input.bytes, signature: input.signature, options: { showInput: true, showEffects: true, showEvents: true } });
       if (tx.effects?.status.status !== 'success') throw new Error(`Transaction failed: ${tx.effects?.status.error ?? 'unknown'}`);
-      executed.set(tx.digest, p); respond(res, 200, { digest: tx.digest, rpc: c.rpc }); return;
+      if (p) executed.set(tx.digest, p); respond(res, 200, { digest: tx.digest, rpc: c.rpc, kind: p ? 'trade' : 'funding' }); return;
     }
     if (url.pathname === '/rounds' && req.method === 'POST') {
       if (process.env.EIDOLON_ALLOW_MAINNET !== 'I_ACKNOWLEDGE_REAL_USDC') throw new Error('Dry-run only: mainnet writes disabled');
@@ -92,9 +110,8 @@ const server = createServer(async (req, res) => {
       if (tx.effects?.status.status !== 'success' || tx.transaction?.data.sender?.toLowerCase() !== p.player) throw new Error('Unverified player transaction');
       const receipt = c.predict.decode.enqueue(tx);
       if (receipt.marketId !== p.marketId || receipt.side !== 'mint') throw new Error('Enqueue receipt differs from reviewed plan');
-      const m = (await marketList()).find(x => x.id === receipt.marketId);
-      if (!m) throw new Error('Enqueue market not active');
-      const round: Round = { digest: input.digest, player: p.player, marketId: receipt.marketId, expiryMs: m.expiryMs, cadence: m.cadence, side: p.side, strike: p.strike, size: p.size, recordId: String(receipt.recordId), context: context(m.cadence, p.strike, m.forward ?? p.strike), status: 'player enqueued', createdAt: new Date().toISOString() };
+      const cadence = p.expiryMs % 300_000 === 0 ? 5 : 1;
+      const round: Round = { digest: input.digest, player: p.player, marketId: receipt.marketId, expiryMs: p.expiryMs, cadence, side: p.side, strike: p.strike, size: p.size, recordId: String(receipt.recordId), context: context(cadence, p.strike, priceSamples.at(-1)?.forward ?? p.strike), status: 'player enqueued', createdAt: new Date().toISOString() };
       executed.delete(input.digest); rounds.push(round); await save(); respond(res, 201, round); void watch(round); return;
     }
     respond(res, 404, { error: 'Not found' });
@@ -204,6 +221,7 @@ async function settle(round: Round, c: ReturnType<typeof chain>) {
     }
     await new Promise(resolve => setTimeout(resolve, 10_000));
   }
+  round.status = 'settlement evidence pending'; await save(); setTimeout(() => void watch(round), 30_000);
 }
 async function watch(round: Round) {
   try {
@@ -212,7 +230,7 @@ async function watch(round: Round) {
       const outcome = await c.predict.read.waitForOutcome(coords, BigInt(round.recordId));
       if (outcome.outcome === 'refunded') { round.status = 'player refunded'; await save(); return; }
       const leg = await filledLeg(c, round.digest, round.marketId, round.recordId, Date.parse(round.createdAt) - 5000);
-      if (!leg) { round.status = `fill evidence pending (${outcome.outcome})`; await save(); return; }
+      if (!leg) { round.status = `fill evidence pending (${outcome.outcome})`; await save(); setTimeout(() => void watch(round), 2000); return; }
       round.playerLeg = leg; round.status = 'player filled'; await save();
     }
     if (!round.ghost && Date.now() < round.expiryMs - 10_000) {
@@ -227,7 +245,8 @@ async function watch(round: Round) {
       const outcome = await c.predict.read.waitForOutcome(coords, BigInt(round.ghost.leg.recordId));
       const leg = await filledLeg(c, round.ghost.leg.digest, round.marketId, round.ghost.leg.recordId, Date.parse(round.createdAt));
       if (leg) { round.ghost.leg = leg; round.ghost.status = 'filled'; await save(); }
-      else { round.ghost.status = `fill evidence pending (${outcome.outcome})`; await save(); }
+      else if (outcome.outcome === 'refunded') { round.ghost.leg = undefined; round.ghost.status = 'refunded'; await save(); }
+      else { round.ghost.status = `fill evidence pending (${outcome.outcome})`; await save(); setTimeout(() => void watch(round), 2000); return; }
     }
     await settle(round, c);
   } catch (e) { round.status = `watch error: ${safeError(e)}`; await save(); }

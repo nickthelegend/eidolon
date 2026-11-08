@@ -12,4 +12,11 @@ test('opposite ghost grows when recalled player loses', () => {
 test('memory round trip and empty memory refusal', () => {
   assert.deepEqual(decodeMemory(encodeMemory(history(true, 2)[0].memory)), history(true, 2)[0].memory);
   assert.throws(() => ghostDecision('up', [], context, 10), /requires recalled/);
+  assert.equal(decodeMemory('EIDOLON_V1 {"kind":"round","size":-5}'), null);
+});
+test('context selection and cap change the decision', () => {
+  const good = history(false, 4);
+  const bad = history(true, 2).map(h => ({ ...h, memory: { ...h.memory, context: { ...context, hourUtc: 20 } } }));
+  const a = ghostDecision('down', [...good, ...bad], context, 3);
+  assert.equal(a.side, 'up'); assert.equal(a.profile.matched, 4); assert.equal(a.profile.hitRate, 0); assert.equal(a.size, 3);
 });

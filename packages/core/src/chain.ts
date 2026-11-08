@@ -17,10 +17,10 @@ export async function markets(env = process.env) {
   const [items, mode, pool] = await Promise.all([c.predict.read.markets(), c.predict.read.executionMode(), c.predict.read.pool()]);
   const prices = await Promise.allSettled(items.map(async m => {
     const p = await c.predict.read.pricer({ underlying: 'BTC', expiryMs: m.expiryMs });
-    const target = p.strikeAtProbability(0.35);
-    return { forward: p.forward, suggestedStrike: target == null ? null : snapStrike(target, m.admissionTickSize), sourceMs: p.asOf.pythSpotMs || p.asOf.blockScholesSpotMs };
+    const up = p.strikeAtProbability(0.35); const down = p.strikeAtProbability(0.65);
+    return { forward: p.forward, suggestedStrike: up == null ? null : snapStrike(up, m.admissionTickSize), suggestedStrikeDown: down == null ? null : snapStrike(down, m.admissionTickSize), sourceMs: p.asOf.pythSpotMs || p.asOf.blockScholesSpotMs };
   }));
-  return { rpc: c.rpc, rpcUrl: c.rpcUrl, mode, pool, markets: items.map((m, i) => ({ ...m, expiryMs: Number(m.expiryMs), underlying: 'BTC', cadence: Number(m.expiryMs) % 300_000 === 0 ? 5 as const : 1 as const, ...(prices[i].status === 'fulfilled' ? prices[i].value : { forward: null, suggestedStrike: null, sourceMs: null }) })) };
+  return { rpc: c.rpc, rpcUrl: c.rpcUrl, mode, pool, markets: items.map((m, i) => ({ ...m, expiryMs: Number(m.expiryMs), underlying: 'BTC', cadence: Number(m.expiryMs) % 300_000 === 0 ? 5 as const : 1 as const, ...(prices[i].status === 'fulfilled' ? prices[i].value : { forward: null, suggestedStrike: null, suggestedStrikeDown: null, sourceMs: null }) })) };
 }
 export async function plan(owner: string, market: { id: string; expiryMs: number; admissionTickSize: number; referencePrice: number | null }, side: 'up' | 'down', amount: number, strike?: number) {
   if (!Number.isFinite(amount) || amount < 1) throw new Error('Minimum size is 1 USDC');
