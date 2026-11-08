@@ -7,8 +7,10 @@ export function memoryFor(player: string, env = process.env) {
   const client = MemWal.create({ key: env.MEMWAL_MAINNET_KEY, accountId: env.MEMWAL_MAINNET_ACCOUNT_ID, serverUrl: 'https://relayer.memory.walrus.xyz', namespace: `eidolon-v1:${player.toLowerCase()}` });
   return {
     async recall(context: Context): Promise<Hit[]> {
-      const result = await client.recall({ query: contextQuery(context), limit: 40 });
-      return result.results.flatMap(r => { const memory = decodeMemory(r.text); return memory ? [{ blobId: r.blob_id, memory, distance: r.distance }] : []; });
+      for (let attempt = 0; ; attempt++) {
+        try { const result = await client.recall({ query: contextQuery(context), limit: 40 }); return result.results.flatMap(r => { const memory = decodeMemory(r.text); return memory ? [{ blobId: r.blob_id, memory, distance: r.distance }] : []; }); }
+        catch (error) { if (attempt >= 3 || !String(error).includes('429')) throw error; await new Promise(resolve => setTimeout(resolve, 2000 * 2 ** attempt)); }
+      }
     },
     async remember(memory: Memory): Promise<string> {
       for (let attempt = 0; ; attempt++) {

@@ -64,6 +64,9 @@ importers:
       '@eidolon/core':
         specifier: workspace:*
         version: link:../core
+      '@mysten/deepbook-v3':
+        specifier: ^2.8.1
+        version: 2.11.1(@mysten/sui@2.39.1(typescript@5.9.3))
       '@mysten/sui':
         specifier: ^2.37.0
         version: 2.39.1(typescript@5.9.3)
