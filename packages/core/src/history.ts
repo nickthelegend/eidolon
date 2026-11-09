@@ -127,7 +127,7 @@ export async function predictHistory(address: string, { limit = 50 }: { limit?: 
     }
     return matched;
   };
-  const enqueues = await pages('enqueues', { eventType: eventType('OrderEnqueued') }, (e) => e.eventType === eventType('OrderEnqueued') && same(e.json?.account_id, accountId) && [1, 2].includes(Number(e.json?.kind)), (x) => x.length >= limit);
+  const enqueues = await pages('enqueues', { eventType: eventType('OrderEnqueued') }, (e) => e.eventType === eventType('OrderEnqueued') && same(e.json?.account_id, accountId) && [0, 1, 2].includes(Number(e.json?.kind)), (x) => x.length >= limit);
   if (!enqueues.length) return [];
   const selected = enqueues.slice(0, limit);
   const wanted = new Set(selected.map((e) => key(e.json!)));
