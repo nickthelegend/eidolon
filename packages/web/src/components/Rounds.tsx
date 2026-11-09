@@ -1,65 +1,55 @@
 import { useEffect, useState } from 'react';
-import { api, short, suiscan, usd, usdc, walruscan, type LeaderRow, type Round } from '../api';
+import { api, avatarFor, short, suiscan, usd, usdc, walruscan, type LeaderRow, type Round } from '../api';
 
 /** Your registered rounds, newest first, each with its on-chain evidence. */
 export function Rounds({ rounds }: { rounds: Round[] }) {
+  if (rounds.length === 0)
+    return (
+      <div className="empty">
+        <img className="empty-art float" src="/art/v2/eidolon2-coin-ghost.webp" alt="" width={120} height={120} />
+        <b>No rounds yet</b>
+        <p>Every round you queue lands here with your order, the ghost’s order and the payout, each on SuiScan.</p>
+      </div>
+    );
   return (
-    <section className="panel" aria-labelledby="rounds-title">
-      <header className="panel-head with-icon">
-        <img className="head-icon float" src="/art/eidolon-bell.webp" alt="" width={40} height={40} />
-        <h2 id="rounds-title">Your rounds</h2>
-        <p className="muted small">Your order, the ghost’s order and the payout, on Sui</p>
-      </header>
-      {rounds.length === 0 ? (
-        <div className="empty">
-          <img className="empty-art float" src="/art/eidolon-empty-arena.webp" alt="" width={96} height={96} />
-          <b>No rounds yet</b>
-          <p>Every round you queue shows here with its SuiScan order, the ghost’s order and the payout proof.</p>
-        </div>
-      ) : (
-        <ul className="rounds">
-          {[...rounds].reverse().map((r) => (
-            <li key={r.digest} className="round">
-              <div className="round-top">
-                <span className={`side-pill side-${r.side}`}>{r.side === 'up' ? 'UP' : 'DOWN'}</span>
-                <span className="num">{usd(r.strike)}</span>
-                <span className="num muted">{r.size.toFixed(2)} USDC · {r.cadence}m</span>
-                <span className="round-status">{r.status}</span>
-              </div>
-              <div className="round-legs">
-                <span>
-                  You <b className={`num ${pnlClass(r.playerLeg?.pnl)}`}>{usdc(r.playerLeg?.pnl)}</b>
-                </span>
-                <span>
-                  Ghost <b className={`num ${pnlClass(r.ghost?.leg?.pnl)}`}>{usdc(r.ghost?.leg?.pnl)}</b>
-                </span>
-                {r.settlement != null && <span className="num muted">settled {usd(r.settlement, 2)}</span>}
-              </div>
-              <div className="round-links">
-                <a href={suiscan(r.digest)} target="_blank" rel="noreferrer">
-                  order {short(r.digest)}
-                </a>
-                {r.ghost?.leg && (
-                  <a href={suiscan(r.ghost.leg.digest)} target="_blank" rel="noreferrer">
-                    ghost {short(r.ghost.leg.digest)}
-                  </a>
-                )}
-                {r.playerLeg?.payoutDigest && (
-                  <a href={suiscan(r.playerLeg.payoutDigest)} target="_blank" rel="noreferrer">
-                    payout
-                  </a>
-                )}
-                {r.memoryBlobId && (
-                  <a href={walruscan(r.memoryBlobId)} target="_blank" rel="noreferrer">
-                    memory {short(r.memoryBlobId)}
-                  </a>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <table className="table">
+      <thead>
+        <tr>
+          <th>Call</th>
+          <th className="r">Strike <i>USD</i></th>
+          <th className="r">You <i>USDC</i></th>
+          <th className="r">Ghost <i>USDC</i></th>
+          <th className="r hide-sm">Proof</th>
+        </tr>
+      </thead>
+      <tbody>
+        {[...rounds].reverse().map((r) => (
+          <tr key={r.digest}>
+            <td>
+              <span className={`pill pill-${r.side}`}>{r.side === 'up' ? '↑ Higher' : '↓ Lower'}</span>{' '}
+              <span className="muted small num">
+                {r.size.toFixed(2)} · {r.cadence}m · {r.status}
+              </span>
+            </td>
+            <td className="r num">{usd(r.strike)}</td>
+            <td className={`r num ${pnl(r.playerLeg?.pnl)}`}>{usdc(r.playerLeg?.pnl)}</td>
+            <td className={`r num ${pnl(r.ghost?.leg?.pnl)}`}>{usdc(r.ghost?.leg?.pnl)}</td>
+            <td className="r hide-sm links">
+              <a href={suiscan(r.digest)} target="_blank" rel="noreferrer">order</a>
+              {r.ghost?.leg && (
+                <a href={suiscan(r.ghost.leg.digest)} target="_blank" rel="noreferrer">ghost</a>
+              )}
+              {r.playerLeg?.payoutDigest && (
+                <a href={suiscan(r.playerLeg.payoutDigest)} target="_blank" rel="noreferrer">payout</a>
+              )}
+              {r.memoryBlobId && (
+                <a href={walruscan(r.memoryBlobId)} target="_blank" rel="noreferrer">memory</a>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -72,40 +62,58 @@ export function Leaderboard() {
     const t = setInterval(load, 15_000);
     return () => clearInterval(t);
   }, []);
+  if (!rows) return <div className="ghost-skel" aria-hidden><span /><span /></div>;
+  if (rows.length === 0)
+    return (
+      <div className="empty">
+        <img className="empty-art float" src="/art/v2/eidolon2-rank-1.webp" alt="" width={120} height={120} />
+        <b>No one has beaten their ghost yet</b>
+        <p>A player shows up after their first round settles and both payouts are proven on Sui.</p>
+      </div>
+    );
+  const ranked = [...rows].sort((a, b) => b.playerPnl - b.ghostPnl - (a.playerPnl - a.ghostPnl));
   return (
-    <section className="panel" aria-labelledby="board-title">
-      <header className="panel-head with-icon">
-        <img className="head-icon float" src="/art/eidolon-trophy.webp" alt="" width={40} height={40} />
-        <h2 id="board-title">You vs your ghost</h2>
-        <p className="muted small">Settled rounds with payout events verified on chain</p>
-      </header>
-      {!rows || rows.length === 0 ? (
-        <div className="empty">
-          <img className="empty-art float" src="/art/eidolon-coins.webp" alt="" width={96} height={96} />
-          <b>No verified players yet</b>
-          <p>A player appears after their first round settles and both payouts are proven on Sui.</p>
-        </div>
-      ) : (
-        <ul className="board">
-          {rows.map((r) => {
-            const total = Math.abs(r.playerPnl) + Math.abs(r.ghostPnl) || 1;
-            return (
-              <li key={r.player}>
-                <span className="num">{short(r.player)}</span>
-                <span className="board-bar" aria-hidden>
-                  <span className="board-you" style={{ width: `${(Math.abs(r.playerPnl) / total) * 100}%` }} />
-                  <span className="board-ghost" style={{ width: `${(Math.abs(r.ghostPnl) / total) * 100}%` }} />
-                </span>
-                <span className={`num ${pnlClass(r.playerPnl)}`}>{usdc(r.playerPnl)}</span>
-                <span className={`num ${pnlClass(r.ghostPnl)}`}>{usdc(r.ghostPnl)}</span>
-                <span className="num muted">{r.settled} settled</span>
-              </li>
-            );
-          })}
-        </ul>
+    <>
+      <ol className="podium">
+        {ranked.slice(0, 3).map((r, i) => (
+          <li key={r.player} className={`podium-${i + 1}`}>
+            <img className="medal" src={`/art/v2/eidolon2-rank-${i + 1}.webp`} alt="" width={56} height={56} />
+            <img className="avatar avatar-lg" src={avatarFor(r.player)} alt="" width={56} height={56} />
+            <b className="num">{short(r.player)}</b>
+            <span className={`edge num ${pnl(r.playerPnl - r.ghostPnl)}`}>{usdc(r.playerPnl - r.ghostPnl)}</span>
+            <small>USDC ahead of their ghost · {r.settled} settled</small>
+          </li>
+        ))}
+      </ol>
+      {ranked.length > 3 && (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Trader</th>
+              <th className="r">You <i>USDC</i></th>
+              <th className="r">Ghost <i>USDC</i></th>
+              <th className="r">Settled</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ranked.slice(3).map((r) => (
+              <tr key={r.player}>
+                <td>
+                  <span className="who">
+                    <img className="avatar" src={avatarFor(r.player)} alt="" width={24} height={24} />
+                    <span className="num">{short(r.player)}</span>
+                  </span>
+                </td>
+                <td className={`r num ${pnl(r.playerPnl)}`}>{usdc(r.playerPnl)}</td>
+                <td className={`r num ${pnl(r.ghostPnl)}`}>{usdc(r.ghostPnl)}</td>
+                <td className="r num muted">{r.settled}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
-    </section>
+    </>
   );
 }
 
-const pnlClass = (n: number | undefined) => (n == null ? 'muted' : n > 0 ? 'up' : n < 0 ? 'down' : '');
+const pnl = (n: number | undefined) => (n == null ? 'muted' : n > 0 ? 'up' : n < 0 ? 'down' : '');

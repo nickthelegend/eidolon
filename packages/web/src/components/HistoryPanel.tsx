@@ -72,113 +72,98 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
   const net = history?.trades.reduce((n, t) => n + t.pnl, 0) ?? 0;
 
   return (
-    <section className="panel history" aria-labelledby="history-title">
-      <header className="panel-head">
-        <div>
-          <p className="eyebrow">Where the ghost comes from</p>
-          <h2 id="history-title">Your trading history</h2>
-        </div>
-        <p className="muted small">Settled DeepBook Predict trades, read from Sui mainnet</p>
-      </header>
+    <div className="history" id="history">
       {!history ? (
-        <div className="empty empty-wide">
-          <img className="empty-art float" src="/art/eidolon-history-scroll.webp" alt="" width={88} height={88} />
-          <div>
-            <b>{owner ? `Read ${short(owner)}’s past trades` : 'Connect or preview an address'}</b>
-            <p>
-              Your ghost can start from what you already did: every settled Predict trade with its fill and payout,
-              straight from the chain. Takes about 20 seconds.
-            </p>
-            <button className="primary" disabled={!owner || busy} onClick={() => load()}>
-              {busy ? (
-                <>
-                  <span className="spin" aria-hidden /> Reading mainnet…
-                </>
-              ) : (
-                'Read my Predict history'
-              )}
-            </button>
-          </div>
+        <div className="empty">
+          <img className="empty-art float" src="/art/v2/eidolon2-memory-vault.webp" alt="" width={120} height={120} />
+          <b>{owner ? `Read ${short(owner)}’s past trades` : 'Connect a wallet or paste an address'}</b>
+          <p>Your ghost starts from what you already did: every settled Predict trade with its fill and payout, read from Sui mainnet. About 20 seconds.</p>
+          <button className="primary" disabled={!owner || busy} onClick={() => load()}>
+            {busy ? (
+              <>
+                <span className="spin" aria-hidden /> Reading mainnet…
+              </>
+            ) : (
+              'Read my Predict history'
+            )}
+          </button>
         </div>
       ) : history.trades.length === 0 ? (
-        <div className="empty empty-wide">
-          <img className="empty-art float" src="/art/eidolon-empty-history.webp" alt="" width={88} height={88} />
-          <div>
-            <b>No settled trades found</b>
-            <p>No complete Predict trade with fill and payout events in the chain history this RPC can reach.</p>
-          </div>
+        <div className="empty">
+          <img className="empty-art" src="/art/v2/eidolon2-empty.webp" alt="" width={120} height={120} />
+          <b>No settled trades found</b>
+          <p>No complete Predict trade with fill and payout events in the history this RPC can reach.</p>
         </div>
       ) : (
         <div className="history-body">
-          <div className="history-table">
-            <div className="trades-head" aria-hidden>
-              <span>Side</span>
-              <span>Strike (USD)</span>
-              <span>Size (USDC)</span>
-              <span>P&amp;L (USDC)</span>
-              <span>On SuiScan</span>
+          <div className="tally">
+            <div>
+              <b className="num">{history.trades.length}</b>
+              <small>settled</small>
             </div>
-            <ul className={`trades ${expanded ? 'open' : ''}`}>
-              {history.trades.map((trade) => (
-                <li key={trade.fillDigest}>
-                  <span className={`side-pill side-${trade.side}`}>{trade.side === 'up' ? 'UP' : 'DOWN'}</span>
-                  <span className="num t-strike">${trade.strike.toLocaleString('en-US')}</span>
-                  <span className="num muted t-size">
-                    {trade.size.toFixed(2)}
-                    <i> USDC</i>
-                  </span>
-                  <b className={`num t-pnl ${trade.pnl > 0 ? 'up' : trade.pnl < 0 ? 'down' : ''}`}>{usdc(trade.pnl)}</b>
-                  <span className="trade-links">
-                    <a href={suiscan(trade.enqueueDigest)} target="_blank" rel="noreferrer">order</a>
-                    <a href={suiscan(trade.fillDigest)} target="_blank" rel="noreferrer">fill</a>
-                    <a href={suiscan(trade.payoutDigest)} target="_blank" rel="noreferrer">payout</a>
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {history.trades.length > 8 && (
-              <button className="more" aria-expanded={expanded} onClick={() => setExpanded((x) => !x)}>
-                {expanded ? 'Show fewer' : `Show all ${history.trades.length} trades`}
-              </button>
-            )}
-          </div>
-
-          <div className="history-side">
-            <div className="tally">
-              <div>
-                <small>Settled</small>
-                <b className="num">{history.trades.length}</b>
-              </div>
-              <div>
-                <small>Won</small>
-                <b className="num">{wins}</b>
-              </div>
-              <div>
-                <small>Net (USDC)</small>
-                <b className={`num ${net > 0 ? 'up' : net < 0 ? 'down' : ''}`}>{usdc(net)}</b>
-              </div>
+            <div>
+              <b className="num">{wins}</b>
+              <small>won</small>
             </div>
-            <p className="fine">Each with a verified fill and payout event.</p>
-            <HBar label="Bets UP" value={history.profile.upBias} />
-            <HBar label="Hit rate" value={history.profile.hitRate} />
-            <p className="fine num">Average size {history.profile.averageSize.toFixed(2)} USDC</p>
-            <div className="next-move">
-              <p className="eyebrow spectral">What your ghost would do next</p>
-              {history.decision ? (
-                <p className="next-line">
-                  Against your <b>{side.toUpperCase()}</b> on the selected market, it bets{' '}
-                  <span className={`side-pill side-${history.decision.side}`}>{history.decision.side.toUpperCase()}</span>{' '}
-                  with <b className="num">{history.decision.size.toFixed(2)} USDC</b>.
-                </p>
-              ) : (
-                <p className="fine">Select an active market to see the decision.</p>
-              )}
-              <p className="fine">{history.source}</p>
+            <div>
+              <b className={`num ${net > 0 ? 'up' : net < 0 ? 'down' : ''}`}>{usdc(net)}</b>
+              <small>net USDC</small>
             </div>
-            <button className="primary" disabled={rememberDisabled} onClick={remember}>
+            <div>
+              <b className="num">{pct(history.profile.upBias)}</b>
+              <small>bets UP</small>
+            </div>
+            <div>
+              <b className="num">{pct(history.profile.hitRate)}</b>
+              <small>hit rate</small>
+            </div>
+            <button className="primary teach" disabled={rememberDisabled} onClick={remember}>
+              <img src="/art/v2/eidolon2-memory-shards.webp" alt="" width={22} height={22} />
               {rememberLabel}
             </button>
           </div>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Call</th>
+                <th className="r">Strike <i>USD</i></th>
+                <th className="r">Size <i>USDC</i></th>
+                <th className="r">P&amp;L <i>USDC</i></th>
+                <th className="r hide-sm">On SuiScan</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(expanded ? history.trades : history.trades.slice(0, 8)).map((trade) => (
+                <tr key={trade.fillDigest}>
+                  <td>
+                    <span className={`pill pill-${trade.side}`}>{trade.side === 'up' ? '↑ Higher' : '↓ Lower'}</span>
+                  </td>
+                  <td className="r num">${trade.strike.toLocaleString('en-US')}</td>
+                  <td className="r num muted">{trade.size.toFixed(2)}</td>
+                  <td className={`r num ${trade.pnl > 0 ? 'up' : trade.pnl < 0 ? 'down' : ''}`}>{usdc(trade.pnl)}</td>
+                  <td className="r hide-sm links">
+                    <a href={suiscan(trade.enqueueDigest)} target="_blank" rel="noreferrer">order</a>
+                    <a href={suiscan(trade.fillDigest)} target="_blank" rel="noreferrer">fill</a>
+                    <a href={suiscan(trade.payoutDigest)} target="_blank" rel="noreferrer">payout</a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {history.trades.length > 8 && (
+            <button className="more" aria-expanded={expanded} onClick={() => setExpanded((x) => !x)}>
+              {expanded ? 'Show fewer' : `Show all ${history.trades.length} trades`}
+            </button>
+          )}
+          <p className="fine">
+            {history.decision ? (
+              <>
+                Against your {side.toUpperCase()} on this market your ghost bets {history.decision.side.toUpperCase()} with{' '}
+                <b className="num">{history.decision.size.toFixed(2)} USDC</b>.{' '}
+              </>
+            ) : null}
+            Source: {history.source}. Average size {history.profile.averageSize.toFixed(2)} USDC.
+          </p>
         </div>
       )}
       {message && (
@@ -186,18 +171,6 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
           {message}
         </p>
       )}
-    </section>
-  );
-}
-
-function HBar({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="bar">
-      <span>{label}</span>
-      <span className="bar-track" aria-hidden>
-        <span className="bar-fill" style={{ width: pct(value) }} />
-      </span>
-      <b className="num">{pct(value)}</b>
     </div>
   );
 }

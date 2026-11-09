@@ -161,3 +161,17 @@ export function humanError(raw: string): string {
   );
   return s;
 }
+
+export type PriceSample = { at: number; forward: number };
+
+/** One of twelve generated avatars, picked from the address so the same trader always gets the same one. */
+export function avatarFor(address: string) {
+  let h = 0;
+  for (const ch of address.toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return `/art/v2/eidolon2-avatar-${String((h % 12) + 1).padStart(2, '0')}.webp`;
+}
+
+export const clockText = (ms: number) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
