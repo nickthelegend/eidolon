@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, pct, post, short, suiscan, usdc, type HistoryResponse, type Side } from '../api';
 
-export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onHistory }: {
+export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onHistory, onBusy }: {
   owner: string | undefined;
   marketId: string;
   side: Side;
@@ -9,6 +9,7 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
   live: boolean;
   setup: string[];
   onHistory?: (history: HistoryResponse | null) => void;
+  onBusy?: (busy: boolean) => void;
 }) {
   const [history, setHistory] = useState<HistoryResponse | null>(null);
   useEffect(() => onHistory?.(history), [history]);
@@ -22,6 +23,7 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
   async function load() {
     if (!owner) return;
     setBusy(true);
+    onBusy?.(true);
     setMessage('');
     try {
       const query = new URLSearchParams({ marketId, side, limit: '20' });
@@ -31,6 +33,7 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
       setMessage(String((error as Error).message ?? error));
     } finally {
       setBusy(false);
+      onBusy?.(false);
     }
   }
   useEffect(() => {
@@ -74,7 +77,7 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
       </header>
       {!history ? (
         <div className="empty empty-wide">
-          <img className="empty-art" src="/art/eidolon-hourglass.webp" alt="" width={88} height={88} />
+          <img className="empty-art float" src="/art/eidolon-history-scroll.webp" alt="" width={88} height={88} />
           <div>
             <b>{owner ? `Read ${short(owner)}’s past trades` : 'Connect or preview an address'}</b>
             <p>
@@ -94,6 +97,7 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
         </div>
       ) : history.trades.length === 0 ? (
         <div className="empty empty-wide">
+          <img className="empty-art float" src="/art/eidolon-empty-history.webp" alt="" width={88} height={88} />
           <div>
             <b>No settled trades found</b>
             <p>No complete Predict trade with fill and payout events in the chain history this RPC can reach.</p>

@@ -5,12 +5,14 @@ import { api, short, suiscan, usd, usdc, walruscan, type LeaderRow, type Round }
 export function Rounds({ rounds }: { rounds: Round[] }) {
   return (
     <section className="panel" aria-labelledby="rounds-title">
-      <header className="panel-head">
+      <header className="panel-head with-icon">
+        <img className="head-icon float" src="/art/eidolon-bell.webp" alt="" width={40} height={40} />
         <h2 id="rounds-title">Your rounds</h2>
+        <p className="muted small">Your order, the ghost’s order and the payout, on Sui</p>
       </header>
       {rounds.length === 0 ? (
         <div className="empty">
-          <img className="empty-art" src="/art/eidolon-empty-arena.webp" alt="" width={96} height={96} />
+          <img className="empty-art float" src="/art/eidolon-empty-arena.webp" alt="" width={96} height={96} />
           <b>No rounds yet</b>
           <p>Every round you queue shows here with its SuiScan order, the ghost’s order and the payout proof.</p>
         </div>
@@ -72,13 +74,14 @@ export function Leaderboard() {
   }, []);
   return (
     <section className="panel" aria-labelledby="board-title">
-      <header className="panel-head">
+      <header className="panel-head with-icon">
+        <img className="head-icon float" src="/art/eidolon-trophy.webp" alt="" width={40} height={40} />
         <h2 id="board-title">You vs your ghost</h2>
         <p className="muted small">Settled rounds with payout events verified on chain</p>
       </header>
       {!rows || rows.length === 0 ? (
         <div className="empty">
-          <img className="empty-art" src="/art/eidolon-trophy.webp" alt="" width={96} height={96} />
+          <img className="empty-art float" src="/art/eidolon-coins.webp" alt="" width={96} height={96} />
           <b>No verified players yet</b>
           <p>A player appears after their first round settles and both payouts are proven on Sui.</p>
         </div>

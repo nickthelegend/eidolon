@@ -5,12 +5,14 @@ export function GhostPanel({
   status,
   round,
   history,
+  historyBusy,
   side,
   preview,
 }: {
   status: Status | null;
   round: Round | undefined;
   history?: HistoryResponse | null;
+  historyBusy?: boolean;
   side?: Side;
   preview?: Plan | null;
 }) {
@@ -18,15 +20,21 @@ export function GhostPanel({
   const ghost = round?.ghost;
   const chainGhost = memoryMissing && history?.decision && history.trades.length ? history : null;
   const awake = Boolean(chainGhost || (!memoryMissing && ghost));
+  // Mood follows real state only: reading history, holding a counter-bet, or empty / lost its last round.
+  const lost = !memoryMissing && (ghost?.leg?.pnl ?? 0) < 0;
+  const mood = historyBusy || status == null ? 'thinking' : lost || !awake ? 'defeated' : 'confident';
   return (
-    <aside className={`panel ghost ${awake ? 'awake' : ''}`} aria-labelledby="ghost-title">
+    <aside className={`panel ghost ${awake ? 'awake' : ''} mood-${mood}`} aria-labelledby="ghost-title">
       <div className="ghost-veil" aria-hidden />
-      <img className="ghost-figure" src="/art/eidolon-ghost.webp" alt="" width={768} height={768} aria-hidden />
-      <header className="panel-head stack">
-        <p className="eyebrow spectral">
-          <span lang="grc">εἴδωλον</span> · always the other side
-        </p>
-        <h2 id="ghost-title">Your ghost</h2>
+      <img key={mood} className="ghost-figure" src={`/art/eidolon-ghost-${mood}.webp`} alt="" width={768} height={768} aria-hidden />
+      <header className="panel-head stack with-bust">
+        <img className="bust bust-ghost" src="/art/eidolon-ghost-bust.webp" alt="" width={48} height={48} />
+        <div>
+          <p className="eyebrow spectral">
+            <span lang="grc">εἴδωλον</span> · always the other side
+          </p>
+          <h2 id="ghost-title">Your ghost</h2>
+        </div>
       </header>
 
       {status == null ? (
@@ -39,7 +47,7 @@ export function GhostPanel({
         <ChainGhost history={chainGhost} side={side ?? 'up'} preview={preview ?? null} />
       ) : memoryMissing ? (
         <div className="empty">
-          <img className="empty-art empty-art-sm" src="/art/eidolon-empty-ghost.webp" alt="" width={56} height={56} />
+          <img className="empty-art empty-art-sm float" src="/art/eidolon-memory-crystal.webp" alt="" width={56} height={56} />
           <b>Setup required: Walrus Memory</b>
           <p>
             The ghost is built only from your recalled trades. Without a Walrus Memory account
@@ -138,8 +146,11 @@ function ChainGhost({ history, side, preview }: { history: HistoryResponse; side
       <p className="fine num">Average size {history.profile.averageSize.toFixed(2)} USDC · deterministic policy, no model</p>
 
       <p className="ghost-note">
-        <b>Not on Walrus yet.</b> This ghost comes from Sui mainnet events. With Walrus Memory set up it remembers
-        every new round and starts recalling them.
+        <img className="float" src="/art/eidolon-memory-crystal.webp" alt="" width={40} height={40} />
+        <span>
+          <b>Not on Walrus yet.</b> This ghost comes from Sui mainnet events. With Walrus Memory set up it remembers
+          every new round and starts recalling them.
+        </span>
       </p>
     </>
   );

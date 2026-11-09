@@ -23,6 +23,7 @@ export function App() {
   const [error, setError] = useState('');
   const [errorAt, setErrorAt] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryResponse | null>(null);
+  const [historyBusy, setHistoryBusy] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const [viewInput, setViewInput] = useState(new URLSearchParams(window.location.search).get('as') ?? '');
@@ -180,6 +181,9 @@ export function App() {
 
       <section className="hero" aria-labelledby="hero-title">
         <HeroMedia />
+        <span className="hero-fog" aria-hidden />
+        <span className="hero-rain" aria-hidden />
+        <span className="hero-flash" aria-hidden />
         <div className="hero-copy">
           <p className="eyebrow">DeepBook Predict · BTC 1 and 5 minute markets · Sui mainnet</p>
           <h1 id="hero-title">
@@ -232,9 +236,12 @@ export function App() {
 
       <main className="arena-grid">
         <aside className="panel you-col" aria-labelledby="arena-title">
-          <header className="panel-head stack">
-            <p className="eyebrow ember">You · the arena</p>
-            <h2 id="arena-title">Place your bet</h2>
+          <header className="panel-head stack with-bust">
+            <img className="bust bust-you" src="/art/eidolon-trader-bust.webp" alt="" width={48} height={48} />
+            <div>
+              <p className="eyebrow ember">You · the arena</p>
+              <h2 id="arena-title">Place your bet</h2>
+            </div>
           </header>
 
           {!account && (
@@ -309,8 +316,11 @@ export function App() {
                     reset();
                   }}
                 >
-                  {s === 'up' ? 'Ends above' : 'Ends below'}
-                  <small>{s === 'up' ? 'UP' : 'DOWN'}</small>
+                  <img className="sigil" src={`/art/eidolon-${s}-sigil.webp`} alt="" width={26} height={26} />
+                  <span className="side-text">
+                    {s === 'up' ? 'Ends above' : 'Ends below'}
+                    <small>{s === 'up' ? 'UP' : 'DOWN'}</small>
+                  </span>
                 </button>
               ))}
             </div>
@@ -392,16 +402,29 @@ export function App() {
           history={history}
         />
 
-        <GhostPanel status={status} round={mine.at(-1)} history={history} side={side} preview={preview} />
+        <GhostPanel status={status} round={mine.at(-1)} history={history} historyBusy={historyBusy} side={side} preview={preview} />
       </main>
 
+      <div className="divider" aria-hidden />
+
       <section className="lower">
-        <HistoryPanel owner={owner} marketId={marketId} side={side} readOnly={readOnly} live={live} setup={status?.setup ?? []} onHistory={setHistory} />
+        <HistoryPanel
+          owner={owner}
+          marketId={marketId}
+          side={side}
+          readOnly={readOnly}
+          live={live}
+          setup={status?.setup ?? []}
+          onHistory={setHistory}
+          onBusy={setHistoryBusy}
+        />
         <div className="lower-side">
           <Rounds rounds={mine} />
           <Leaderboard />
         </div>
       </section>
+
+      <HowItWorks />
 
       <footer className="foot">
         <img src="/art/eidolon-mark.webp" alt="" width={24} height={24} />
@@ -431,6 +454,53 @@ function HeroMedia() {
       src="/art/eidolon-hero-loop.mp4"
       aria-hidden
     />
+  );
+}
+
+const STEPS = [
+  {
+    art: 'film-bg-2',
+    title: 'Your ghost reads your trades',
+    text: 'Settled Predict trades from Sui mainnet give it your habits: how often you bet UP, how often you win, how much you stake.',
+  },
+  {
+    art: 'price-duel',
+    title: 'It always takes the other side',
+    text: 'Quote a bet and the ghost places the opposite one at the nearest strike Predict will price.',
+  },
+  {
+    art: 'dead-zone',
+    title: 'Pyth settles both at expiry',
+    text: 'Between the two strikes is a dead zone where both bets lose. The board counts only payouts proven on chain.',
+  },
+  {
+    art: 'film-bg-3',
+    title: 'Every round becomes a memory',
+    text: 'With Walrus Memory set up, each settled round is written to Walrus mainnet and recalled the next time you play.',
+  },
+] as const;
+
+function HowItWorks() {
+  return (
+    <section className="how" aria-labelledby="how-title">
+      <img className="how-bg" src="/art/eidolon-social-1.webp" alt="" loading="lazy" aria-hidden />
+      <header className="how-head">
+        <p className="eyebrow">How a round works</p>
+        <h2 id="how-title">One market, two bets, one settlement</h2>
+      </header>
+      <ol className="how-steps">
+        {STEPS.map((step, i) => (
+          <li key={step.art}>
+            <span className="how-art">
+              <img src={`/art/eidolon-${step.art}.webp`} alt="" loading="lazy" width={1536} height={1024} />
+            </span>
+            <span className="how-n num">0{i + 1}</span>
+            <b>{step.title}</b>
+            <p>{step.text}</p>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -466,10 +536,13 @@ function Funding({
       <summary>
         <span>Fund your Predict account</span>
       </summary>
-      <p className="muted small">
-        Predict trades from a USDC balance inside its own account. Creating it and the first deposit can be one
-        signed transaction.
-      </p>
+      <div className="funding-intro">
+        <img className="float" src="/art/eidolon-vault.webp" alt="" width={64} height={64} />
+        <p className="muted small">
+          Predict trades from a USDC balance inside its own account. Creating it and the first deposit can be one
+          signed transaction.
+        </p>
+      </div>
       <div className="fields">
         <label>
           <span>Deposit</span>

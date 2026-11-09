@@ -51,9 +51,12 @@ export function Stage({
           )}
         </div>
         {market && (
-          <div className={`clock ${s <= 10 ? 'clock-late' : ''}`} aria-label={`${s} seconds to expiry`}>
-            <b className="fig">{clock}</b>
-            <span>to expiry</span>
+          <div className="clock-wrap">
+            <img className="clock-art float" src="/art/eidolon-clock-5m.webp" alt="" width={48} height={48} />
+            <div className={`clock ${s <= 10 ? 'clock-late' : ''}`} aria-label={`${s} seconds to expiry`}>
+              <b className="fig">{clock}</b>
+              <span>to expiry</span>
+            </div>
           </div>
         )}
       </header>
@@ -71,17 +74,21 @@ export function Stage({
 
       {refusal && (
         <div className="quote refused" role="alert">
-          <div className="quote-row">
-            <span className="quote-flag">Predict refuses this bet</span>
+          <img className="refused-art float" src="/art/eidolon-refused-gate.webp" alt="" width={80} height={80} />
+          <div>
+            <div className="quote-row">
+              <span className="quote-flag">Predict refuses this bet</span>
+            </div>
+            <p className="refusal-text">{refusal}</p>
+            <p className="fine">Predict only opens bets it prices between 15% and 50%. Move the strike closer to BTC now.</p>
           </div>
-          <p className="refusal-text">{refusal}</p>
-          <p className="fine">Predict only opens bets it prices between 15% and 50%. Move the strike closer to BTC now.</p>
         </div>
       )}
 
       {preview && (
         <div className="tickets">
           <div className={`quote ${preview.accepting ? '' : 'refused'}`}>
+            <img className={`ticket-sigil sigil-${side}`} src={`/art/eidolon-${side}-sigil.webp`} alt="" width={72} height={72} />
             <div className="quote-row">
               <span className="who who-you">You</span>
               <span className="quote-flag">{preview.accepting ? 'Predict accepts this bet' : `Predict refuses: ${preview.refusal}`}</span>
@@ -141,6 +148,7 @@ export function Stage({
             </div>
             {ghost ? (
               <>
+                <img className={`ticket-sigil sigil-${ghost.side}`} src={`/art/eidolon-${ghost.side}-sigil.webp`} alt="" width={72} height={72} />
                 <p className="ticket-line">
                   <span className={`side-pill side-${ghost.side}`}>{ghost.side === 'up' ? 'UP' : 'DOWN'}</span>
                   <b className="num">{usd(ghost.strike)}</b>
