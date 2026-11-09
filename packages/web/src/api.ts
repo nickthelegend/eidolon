@@ -67,6 +67,8 @@ export type HistoryResponse = {
   profile: GhostProfile & { averageSize: number };
   decision: { side: Side; size: number; profile: GhostProfile } | null;
   source: string;
+  blobIds?: string[];
+  memoryError?: string | null;
 };
 
 export type Leg = { digest: string; pnl?: number; fillDigest?: string; payoutDigest?: string };

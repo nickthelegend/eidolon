@@ -47,20 +47,24 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
     if (!owner || !history || loadedOwner !== owner) return;
     const query = new URLSearchParams({ marketId, side, limit: '20' });
     api<HistoryResponse>(`/history/${owner}?${query}`).then(setHistory).catch(() => {});
-  }, [marketId, side]);
+    // loadedOwner too: a read that started before the markets loaded has no market, so no ghost decision.
+  }, [marketId, side, loadedOwner]);
 
   async function remember() {
     if (!owner || rememberDisabled) return;
     setBusy(true);
     setMessage('');
+    let stored = false;
     try {
       const result = await post<{ blobIds: string[] }>(`/history/${owner}/remember`, {});
-      setMessage(`Wrote ${result.blobIds.length} trade memories to Walrus: ${result.blobIds.map(short).join(', ')}`);
+      setMessage(`Wrote ${result.blobIds.length} trade memories to Walrus: ${result.blobIds.slice(0, 4).map(short).join(', ')}${result.blobIds.length > 4 ? ` and ${result.blobIds.length - 4} more` : ''}`);
+      stored = true;
     } catch (error) {
       setMessage(String((error as Error).message ?? error));
     } finally {
       setBusy(false);
     }
+    if (stored) await load(); // the ghost now rebuilds from what Walrus recalls
   }
 
   const [expanded, setExpanded] = useState(false);

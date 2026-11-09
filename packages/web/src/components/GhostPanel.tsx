@@ -18,7 +18,8 @@ export function GhostPanel({
 }) {
   const memoryMissing = status?.setup.some((s) => s.includes('MEMWAL')) ?? true;
   const ghost = round?.ghost;
-  const chainGhost = memoryMissing && history?.decision && history.trades.length ? history : null;
+  // Before any round of your own, the ghost comes from history: recalled from Walrus when memory is set up, else read from chain.
+  const chainGhost = (memoryMissing || !ghost) && history?.decision && history.trades.length ? history : null;
   const awake = Boolean(chainGhost || (!memoryMissing && ghost));
   // Mood follows real state only: reading history, holding a counter-bet, or empty / lost its last round.
   const lost = !memoryMissing && (ghost?.leg?.pnl ?? 0) < 0;
@@ -113,11 +114,13 @@ export function GhostPanel({
 
 function ChainGhost({ history, side, preview }: { history: HistoryResponse; side: Side; preview: Plan | null }) {
   const decision = history.decision!;
+  const blobs = history.blobIds ?? [];
+  const fromWalrus = history.source.startsWith('Walrus') && blobs.length > 0;
   const placed = preview?.ghostPreview && preview.ghostPreview.side === decision.side ? preview.ghostPreview : null;
   return (
     <>
       <blockquote className="roast">
-        I read your last {history.trades.length} settled trades: {pct(history.profile.upBias)} UP, {pct(history.profile.hitRate)}{' '}
+        {fromWalrus ? `I recalled ${blobs.length} of your trades from Walrus Memory` : `I read your last ${history.trades.length} settled trades`}: {pct(history.profile.upBias)} UP, {pct(history.profile.hitRate)}{' '}
         hit rate. I always take the other side, so against your {side.toUpperCase()} I go {decision.side.toUpperCase()} with{' '}
         {decision.size.toFixed(2)} USDC{history.profile.hitRate < 0.5 ? ', sized up because you lose more than you win.' : ', your own average size.'}
       </blockquote>
@@ -140,18 +143,36 @@ function ChainGhost({ history, side, preview }: { history: HistoryResponse; side
           : 'Quote a bet in the arena and the ghost places its counter-strike.'}
       </p>
 
-      <h3 className="sub">Read from your chain history</h3>
+      <h3 className="sub">{fromWalrus ? 'Read from your Walrus memories' : 'Read from your chain history'}</h3>
       <Bar label="Bets UP" value={history.profile.upBias} />
       <Bar label="Hit rate" value={history.profile.hitRate} />
       <p className="fine num">Average size {history.profile.averageSize.toFixed(2)} USDC · deterministic policy, no model</p>
 
-      <p className="ghost-note">
-        <img className="float" src="/art/eidolon-memory-crystal.webp" alt="" width={40} height={40} />
-        <span>
-          <b>Not on Walrus yet.</b> This ghost comes from Sui mainnet events. With Walrus Memory set up it remembers
-          every new round and starts recalling them.
-        </span>
-      </p>
+      {fromWalrus ? (
+        <>
+          <h3 className="sub">
+            Recalled from Walrus mainnet <span className="count num">{blobs.length}</span>
+          </h3>
+          <div className="chips">
+            {blobs.slice(0, 8).map((id) => (
+              <a key={id} className="chip" href={walruscan(id)} target="_blank" rel="noreferrer">
+                {short(id)}
+              </a>
+            ))}
+            {blobs.length > 8 && <span className="chip">+{blobs.length - 8} more</span>}
+          </div>
+        </>
+      ) : (
+        <p className="ghost-note">
+          <img className="float" src="/art/eidolon-memory-crystal.webp" alt="" width={40} height={40} />
+          <span>
+            <b>Not on Walrus yet.</b>{' '}
+            {history.memoryError
+              ? `Walrus recall failed: ${history.memoryError}`
+              : 'This ghost comes from Sui mainnet events. Remember these trades on Walrus and it recalls them from there.'}
+          </span>
+        </p>
+      )}
     </>
   );
 }

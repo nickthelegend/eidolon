@@ -324,23 +324,39 @@ const server = createServer(async (req, res) => {
       }
       if (req.method !== 'GET') throw new Error('Method not allowed');
       const trades = await predictHistory(address, { limit: Number(url.searchParams.get('limit') ?? 20) });
-      const hits: Hit[] = trades.map((trade) => ({ blobId: trade.fillDigest, memory: trade }));
+      let hits: Hit[] = trades.map((trade) => ({ blobId: trade.fillDigest, memory: trade }));
+      // With Walrus Memory configured, the ghost is built from what it recalls there; the trade list stays the chain's.
+      let source = 'on-chain history, not yet in Walrus memory';
+      let blobIds: string[] = [];
+      let memoryError: string | null = null;
+      if (process.env.MEMWAL_MAINNET_KEY && process.env.MEMWAL_MAINNET_ACCOUNT_ID) {
+        try {
+          const recalled = await memoryFor(address).recall(context(1, 0, 0));
+          if (recalled.length) {
+            hits = recalled;
+            blobIds = recalled.map((h) => h.blobId);
+            source = 'Walrus Memory mainnet';
+          }
+        } catch (error) {
+          memoryError = String((error as Error).message ?? error);
+        }
+      }
       const profile = habitProfile(hits);
       let decision: ReturnType<typeof ghostDecision> | null = null;
       const marketId = url.searchParams.get('marketId');
       const side = url.searchParams.get('side');
-      if (trades.length && marketId && (side === 'up' || side === 'down')) {
+      if (hits.length && marketId && (side === 'up' || side === 'down')) {
         const selected = (await marketList()).find((m) => m.id === marketId);
         if (selected?.forward != null) {
           const strike = side === 'up' ? selected.suggestedStrike : selected.suggestedStrikeDown;
           if (strike != null) {
             const liveContext = context(selected.cadence, strike, selected.forward);
             const picked = ghostDecision(side, hits, liveContext, Number(process.env.EIDOLON_GHOST_MAX_USDC ?? 5));
-            decision = { ...picked, blobIds: [] };
+            decision = { ...picked, blobIds };
           }
         }
       }
-      respond(res, 200, { trades, profile, decision, source: 'on-chain history, not yet in Walrus memory' });
+      respond(res, 200, { trades, profile, decision, source, blobIds, memoryError });
       return;
     }
     if (url.pathname.startsWith('/ghost/')) {
