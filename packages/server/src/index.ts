@@ -17,7 +17,21 @@ import {
 import { toBase64 } from '@mysten/sui/utils';
 import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { cost } from '@mysten/deepbook-v3/predict';
+import { cost, decodeMoveAbort, describePredictError } from '@mysten/deepbook-v3/predict';
+
+// Turns a Predict Move abort (structured from gRPC, or the JSON-RPC error string) into the SDK's own plain sentence,
+// keeping the module::constant so the chain error stays checkable. Returns null when the error is not a Move abort.
+function explainAbort(err: unknown): string | null {
+  let e: any = err;
+  const text = typeof err === 'string' ? err : typeof (err as any)?.message === 'string' ? (err as any).message : '';
+  if (!e?.MoveAbort && text) {
+    const m = text.match(/Identifier\("([a-z_]+)"\)[\s\S]*?\},\s*(\d+)\)/);
+    if (m) e = { MoveAbort: { location: { module: m[1] }, abortCode: m[2] } };
+  }
+  const d = decodeMoveAbort(e);
+  if (!d) return null;
+  return `${describePredictError(d) ?? 'Predict refused this transaction.'} (${d.module}::${d.abortName ?? `code ${d.code}`})`;
+}
 
 type Leg = {
   digest: string;
@@ -325,12 +339,12 @@ const server = createServer(async (req, res) => {
         c.client instanceof SuiJsonRpcClient
           ? await c.client
               .dryRunTransactionBlock({ transactionBlock: bytes })
-              .then((x) => ({ status: x.effects.status.status, error: x.effects.status.error ?? null }))
+              .then((x) => ({ status: x.effects.status.status, error: x.effects.status.error ? (explainAbort(x.effects.status.error) ?? x.effects.status.error) : null }))
           : await c.client.core
               .simulateTransaction({ transaction: bytes, include: { effects: true } })
               .then((x) => ({
                 status: x.$kind === 'Transaction' ? 'success' : 'failure',
-                error: x.$kind === 'FailedTransaction' ? x.FailedTransaction.status.error?.message : null,
+                error: x.$kind === 'FailedTransaction' ? (explainAbort(x.FailedTransaction.status.error) ?? x.FailedTransaction.status.error?.message ?? null) : null,
               }));
       if (dry.status === 'success') preparedFunding.set(encoded, Date.now());
       respond(res, 200, {
@@ -398,7 +412,7 @@ const server = createServer(async (req, res) => {
         transaction = toBase64(bytes);
         if (c.client instanceof SuiJsonRpcClient) {
           const result = await c.client.dryRunTransactionBlock({ transactionBlock: bytes });
-          dryRun = { status: result.effects.status, events: result.events?.length ?? 0, rpc: c.rpc };
+          dryRun = { status: result.effects.status.error ? { ...result.effects.status, error: explainAbort(result.effects.status.error) ?? result.effects.status.error } : result.effects.status, events: result.events?.length ?? 0, rpc: c.rpc };
           if (result.effects.status.status === 'success')
             prepared.set(transaction, {
               player: input.owner.toLowerCase(),
@@ -418,7 +432,7 @@ const server = createServer(async (req, res) => {
             status:
               result.$kind === 'Transaction'
                 ? { status: 'success' }
-                : { status: 'failure', error: result.FailedTransaction.status.error?.message },
+                : { status: 'failure', error: explainAbort(result.FailedTransaction.status.error) ?? result.FailedTransaction.status.error?.message },
             events: result.$kind === 'Transaction' ? (result.Transaction.events?.length ?? 0) : 0,
             rpc: c.rpc,
           };
