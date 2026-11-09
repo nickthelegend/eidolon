@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { reconstructTrade, type HistoryEvidence } from '../src/history.js';
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/mainnet-history.json', import.meta.url), 'utf8')) as HistoryEvidence;
+const upFixture = JSON.parse(readFileSync(new URL('./fixtures/mainnet-history-up.json', import.meta.url), 'utf8')) as HistoryEvidence;
+const winFixture = JSON.parse(readFileSync(new URL('./fixtures/mainnet-history-win.json', import.meta.url), 'utf8')) as HistoryEvidence;
 test('reconstructs a settled mint from real mainnet event JSON and digests', () => {
   const trade = reconstructTrade(fixture);
   assert.ok(trade);
@@ -25,4 +27,19 @@ test('reconstructs a settled mint from real mainnet event JSON and digests', () 
 });
 test('does not count a payout for a different record as this trade', () => {
   assert.equal(reconstructTrade({ ...fixture, payout: { ...fixture.payout, event: { ...fixture.payout.event, record_id: '99' } } }), null);
+});
+test('reads UP direction from the minted strike range, not the queue order kind', () => {
+  const trade = reconstructTrade(upFixture);
+  assert.ok(trade);
+  assert.equal(trade.side, 'up');
+  assert.equal(trade.strike, 74807.42);
+  assert.equal(trade.fillDigest, upFixture.fill.digest);
+});
+test('uses the real payout to calculate a winning trade P&L', () => {
+  const trade = reconstructTrade(winFixture);
+  assert.ok(trade);
+  assert.equal(trade.hit, true);
+  assert.equal(trade.payout, 3.42);
+  assert.equal(trade.size, 1.95605);
+  assert.equal(trade.pnl, 1.46395);
 });

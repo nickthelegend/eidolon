@@ -4,6 +4,7 @@
   "expiryMs": 1794191100000,
   "tickSizeRaw": "10000000",
   "settlementPrice": 75360.06476377,
+  "settlementPriceRaw": "75360064763770",
   "enqueue": {
     "digest": "GpaW2PeG21cU6wQTL3fT1Ky1XaeRZAsG8t2XmTk4SVmC",
     "event": {

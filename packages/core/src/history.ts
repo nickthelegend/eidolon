@@ -1,7 +1,9 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { AccountWrapper } from '@mysten/deepbook-v3/account';
-import { toBase64, fromBase64 } from '@mysten/sui/utils';
-import { chain, type TradeMemory } from './index.js';
+import { cost } from '@mysten/deepbook-v3/predict';
+import { toBase64 } from '@mysten/sui/utils';
+import { chain } from './chain.js';
+import type { TradeMemory } from './policy.js';
 
 export type RawHistoryEvent = {
   eventType: string;
@@ -16,6 +18,7 @@ export type HistoryEvidence = {
   expiryMs: number;
   tickSizeRaw: string;
   settlementPrice: number;
+  settlementPriceRaw: string;
   enqueue: { digest: string; event: Record<string, any> };
   fill: { digest: string; event: Record<string, any>; transactionEvents: { eventType: string; json: Record<string, any> | null }[] };
   payout: { digest: string; event: Record<string, any> };
@@ -47,7 +50,7 @@ export function reconstructTrade(e: HistoryEvidence): HistoricalTrade | null {
   if (![0, 1, 2].includes(Number(q.kind))) return null; // mint kinds only
   if (!f.position?.order_id || raw(f.position.order_id) === 0n || !same(f.position.order_id, p.order_id)) return null;
   const minted = fill.transactionEvents.find((v) => v.eventType.endsWith('::order_events::OrderMinted') && same(v.json?.account_id, e.accountId) && same(v.json?.order_id, f.position.order_id))?.json;
-  if (!minted) return null;
+  if (!minted || !same(minted.owner, e.owner)) return null;
   const tick = Number(raw(e.tickSizeRaw)) / 1e9;
   const up = raw(minted.lower_tick) > 0n;
   const strikeTick = raw(up ? minted.lower_tick : minted.higher_tick);
@@ -56,6 +59,8 @@ export function reconstructTrade(e: HistoryEvidence): HistoricalTrade | null {
   const size = Math.round((usdc(f.amount) + usdc(f.order_fee)) * 1e6) / 1e6;
   const premium = usdc(minted.premium);
   const paid = usdc(p.payout);
+  const expectedPayout = Number(cost.settledPayout(raw(f.position.order_id), raw(e.settlementPriceRaw), raw(e.tickSizeRaw))) / 1e6;
+  if (Math.abs(expectedPayout - paid) > 0.000001) return null;
   const at = Number(raw(f.onchain_timestamp_ms));
   if (forward == null || ![strike, forward, size, premium, paid, at, e.settlementPrice].every(Number.isFinite) || size <= 0 || at <= 0) return null;
   const cadence = e.expiryMs % 300_000 === 0 ? 5 : 1;
@@ -94,7 +99,10 @@ export async function predictHistory(address: string, { limit = 50 }: { limit?: 
   if (!Number.isInteger(limit) || limit < 1) throw new Error('History limit must be positive');
   limit = Math.min(limit, 200);
   const owner = address.toLowerCase(), c = chain();
-  const wrapper = await c.client.core.getObject({ objectId: c.predict.wrapperIdFor(owner), include: { content: true } }).catch(() => null);
+  const wrapper = await c.client.core.getObject({ objectId: c.predict.wrapperIdFor(owner), include: { content: true } }).catch((error) => {
+    if (String(error).includes('not found')) return null;
+    throw error;
+  });
   if (!wrapper?.object || wrapper.object instanceof Error || !wrapper.object.content) return [];
   const accountId = AccountWrapper.parse(wrapper.object.content).account.account_id.toLowerCase();
   const pkg = c.config.packages.predictOrdersV1 ?? c.config.packages.predictOrders;
@@ -128,14 +136,14 @@ export async function predictHistory(address: string, { limit = 50 }: { limit?: 
   const [fills, payouts] = await Promise.all([scan('QueuedOrderFilled'), scan('OpenRecordSettled')]);
   const byKey = (items: RawHistoryEvent[]) => new Map(items.map((e) => [key(e.json!), e]));
   const fillMap = byKey(fills), payoutMap = byKey(payouts);
-  const marketReads = new Map<string, Promise<{ expiryMs: number; tickSizeRaw: string; settlementPrice: number }>>();
+  const marketReads = new Map<string, Promise<{ expiryMs: number; tickSizeRaw: string; settlementPrice: number; settlementPriceRaw: string }>>();
   const txReads = new Map<string, Promise<{ eventType: string; json: Record<string, any> | null }[]>>();
   const trades: HistoricalTrade[] = [];
   for (const queued of selected) {
     const filled = fillMap.get(key(queued.json!)), paid = payoutMap.get(key(queued.json!));
     if (!filled || !paid) continue;
     const marketId = String(queued.json!.expiry_market_id);
-    if (!marketReads.has(marketId)) marketReads.set(marketId, (async () => {
+    if (!marketReads.has(marketId)) marketReads.set(marketId, cached(`data/history/${owner}-market-${marketId}.json`, async () => {
       const object = await c.client.core.getObject({ objectId: marketId, include: { content: true } });
       if (!object.object || object.object instanceof Error || !object.object.content || !object.object.type?.endsWith('::expiry_market::ExpiryMarket')) throw new Error('Market object unavailable');
       const bytes = object.object.content;
@@ -143,15 +151,15 @@ export async function predictHistory(address: string, { limit = 50 }: { limit?: 
       const expiryMs = Number(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigUint64(36, true));
       const settlement = await c.predict.read.settlement({ underlying: 'BTC', expiryMs, marketId });
       if (!settlement.settled || settlement.settlementPrice == null) throw new Error('Settlement unavailable');
-      return { expiryMs, tickSizeRaw: String(settlement.tickSizeRaw), settlementPrice: settlement.settlementPrice };
-    })());
-    if (!txReads.has(filled.transactionDigest)) txReads.set(filled.transactionDigest, (async () => {
+      return { expiryMs, tickSizeRaw: String(settlement.tickSizeRaw), settlementPrice: settlement.settlementPrice, settlementPriceRaw: String(settlement.settlementPriceRaw) };
+    }));
+    if (!txReads.has(filled.transactionDigest)) txReads.set(filled.transactionDigest, cached(`data/history/${owner}-filltx-${filled.transactionDigest}.json`, async () => {
       const result = await c.client.core.getTransaction({ digest: filled.transactionDigest, include: { events: true } });
       if (result.$kind !== 'Transaction') throw new Error('Fill transaction unavailable');
       const decoded = c.predict.decode.queuedFills(result.Transaction);
       if (!decoded.some((x) => same(x.accountId, accountId) && String(x.recordId) === String(filled.json?.record_id))) throw new Error('Fill event failed SDK decode');
       return (result.Transaction.events ?? []).map((e) => ({ eventType: e.eventType, json: e.json }));
-    })());
+    }));
     const [market, transactionEvents] = await Promise.all([marketReads.get(marketId)!, txReads.get(filled.transactionDigest)!]);
     const evidence: HistoryEvidence = { owner, accountId, ...market,
       enqueue: { digest: queued.transactionDigest, event: queued.json! },

@@ -92,9 +92,9 @@ export function contextQuery(c: Context): string {
   return `EIDOLON_V1 BTC ${c.cadence} minute cadence ${move} five minute move ${c.move5m == null ? 'unknown' : Math.round(c.move5m)} strike distance ${Math.round(c.strikeDistance)} hour UTC ${c.hourUtc} trade outcome`;
 }
 
-export function habitProfile(hits: Hit[], context: Context): HabitProfile {
+export function habitProfile(hits: Hit[], context?: Context): HabitProfile {
   const all = hits.filter((h): h is Hit & { memory: TradeMemory } => h.memory.kind === 'round');
-  const matched = all.filter(
+  const matched = context ? all.filter(
     (h) =>
       h.memory.cadence === context.cadence &&
       (h.memory.context.move60s == null ||
@@ -105,7 +105,7 @@ export function habitProfile(hits: Hit[], context: Context): HabitProfile {
         Math.abs(h.memory.context.hourUtc - context.hourUtc),
         24 - Math.abs(h.memory.context.hourUtc - context.hourUtc),
       ) <= 3,
-  );
+  ) : [];
   const use = matched.length ? matched : all;
   const avg = (get: (m: TradeMemory) => number) =>
     use.length ? use.reduce((n, h) => n + get(h.memory), 0) / use.length : 0;
