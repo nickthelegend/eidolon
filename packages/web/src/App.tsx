@@ -190,11 +190,19 @@ export function App() {
           </header>
 
           {!account && (
-            <div className="fields">
-              <label>View as address
-                <input value={viewInput} onChange={(e) => setViewInput(e.target.value)} placeholder="0x…" />
-              </label>
-              <button onClick={applyViewAddress}>View address</button>
+            <div className="viewas">
+              <label htmlFor="viewas-input">Preview as any Sui address (read-only)</label>
+              <div className="viewas-row">
+                <input
+                  id="viewas-input"
+                  className="num"
+                  value={viewInput}
+                  onChange={(e) => setViewInput(e.target.value)}
+                  placeholder="0x… a public address with Predict history"
+                  spellCheck={false}
+                />
+                <button onClick={applyViewAddress}>Preview</button>
+              </div>
             </div>
           )}
 
@@ -320,8 +328,8 @@ export function App() {
           <Funding live={live && !readOnly && Boolean(account)} owner={owner} signAndSend={signAndSend} />
         </section>
 
-        <HistoryPanel owner={owner} marketId={marketId} side={side} readOnly={readOnly} live={live} setup={status?.setup ?? []} />
         <GhostPanel status={status} round={mine.at(-1)} />
+        <HistoryPanel owner={owner} marketId={marketId} side={side} readOnly={readOnly} live={live} setup={status?.setup ?? []} />
 
         <Rounds rounds={mine} />
         <Leaderboard />
