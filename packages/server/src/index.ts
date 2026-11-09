@@ -97,6 +97,14 @@ const priceSamples: { at: number; forward: number }[] = [];
 function samplePrice(forward: number) {
   priceSamples.push({ at: Date.now(), forward });
   while (priceSamples.length && priceSamples[0].at < Date.now() - 1_800_000) priceSamples.shift();
+  void mkdir(dataDir, { recursive: true }).then(() => writeFile(`${dataDir}/prices.json`, JSON.stringify(priceSamples))).catch(() => {});
+}
+// Samples survive a restart, so the chart opens with up to 30 minutes of history.
+try {
+  const kept = JSON.parse(await readFile(`${dataDir}/prices.json`, 'utf8')) as { at: number; forward: number }[];
+  priceSamples.push(...kept.filter((p) => p.at > Date.now() - 1_800_000));
+} catch {
+  /* first run */
 }
 setInterval(() => { void marketsCached().catch(() => {}); }, 4_000).unref();
 const prepared = new Map<
@@ -408,7 +416,11 @@ const server = createServer(async (req, res) => {
           }
         }
       }
-      respond(res, 200, { trades, profile, decision, source, blobIds, memoryError });
+      // Which Walrus blob holds each trade, matched by its fill digest, so the app can link every memory.
+      const memoryByFill: Record<string, string> = {};
+      if (source === 'Walrus Memory mainnet')
+        for (const h of hits) if (h.memory.kind === 'round' && h.memory.fillDigest) memoryByFill[h.memory.fillDigest] = h.blobId;
+      respond(res, 200, { trades, profile, decision, source, blobIds, memoryError, memoryByFill });
       return;
     }
     if (url.pathname.startsWith('/ghost/')) {
