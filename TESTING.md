@@ -16,7 +16,7 @@ Run on 2026-11-09 against Sui mainnet with the public development gRPC endpoint.
 | `POST /history/:address/remember` without memory keys | Refused with `Setup required: MEMWAL_MAINNET_KEY` |
 | Vite `/?as=<demo address>` | HTTP 200 on port 5181; the URL, owner selection, read-only banner, and hidden signing controls are implemented in the app. Browser inspection was unavailable in this environment. |
 
-The public development endpoint marks chain reads **dev RPC (not Tatum)**. Its event history has a finite checkpoint window, so older trades can require an archival RPC. Sui JSON-RPC is deprecated; the app now uses Tatum's native gRPC gateway when `TATUM_API_KEY` is set. Walrus writes, wallet signing, and real Predict orders remain unverified because funded signing wallets were not supplied. The existing live test can fail during a market rollover or if no recent account stays funded; it reports the failure instead of claiming a simulated success.
+The public development endpoint marks chain reads **dev RPC (not Tatum)**. Its event history has a finite checkpoint window, so older trades can require an archival RPC. Sui JSON-RPC is deprecated; the app now uses Tatum's native gRPC gateway when `TATUM_API_KEY` is set. Wallet signing and real Predict orders remain unverified because the signing wallets are not funded yet. Walrus writes were verified later the same day (see below). The existing live test can fail during a market rollover or if no recent account stays funded; it reports the failure instead of claiming a simulated success.
 
 ## Tatum gRPC smoke check (Nov 9 2026)
 
@@ -35,3 +35,18 @@ The gateway responses block a Tatum quote or dry-run and the event-backed settle
 ## Round-2 judging pass (Nov 9 2026)
 - `pnpm test`: 10/10 passed; `pnpm -r build` passed.
 - Checked by hand (headless Chrome, 1440 and 375 px, no overflow), previewing public address `0xa9eb…c79c`: 15 settled trades loaded from mainnet, and the ghost panel showed the history-built ghost (27% UP, 73% hit rate, DOWN 4.87 USDC at the nearest admissible strike, 49% odds). A far strike showed the refusal inside the arena. The deposit dry-run read "holds 0.00 USDC in its wallet; this deposit needs 10.00 USDC".
+
+## Walrus Memory mainnet run (Nov 9 2026)
+
+All 31 blob IDs are in [docs/walrus-mainnet-2026-11-09.json](docs/walrus-mainnet-2026-11-09.json).
+
+| Check | Result |
+| --- | --- |
+| Account lookup | Found on chain: the relayer's `GET /config` package `0xe7c16fbe…d7f5` has `account::DelegateKeyAdded` events listing Eidolon's delegate key (label "2") under account `0xd2ca3cbe…335a` |
+| Delegate key auth | `POST /api/stats` on the mainnet relayer returned owner `0x0cff6ac3…7e93` |
+| Test write | 1 memory, blob `PJQ_DMK9MAlBM82wpPLkVTehX5nM8ne63HARgsKnw9o`, at 15:3x UTC |
+| `POST /history/:address/remember` for `0x96ed1d73…2ccd2` | 30 settled trades stored, 15:38:21 to 15:40:38 UTC |
+| `GET /ghost/0x96ed1d73…2ccd2` | 31 hits (31 unique blobs). Profile: 32% UP bets, 81% hit rate, average size 4.84 USDC |
+| `GET /status` | `rpc: "Tatum"` |
+
+Mainnet blobs took over 60 s to certify, so writes now wait up to 300 s (`afb613b`), and history goes in through `rememberBulkAndWait` in chunks of 20 (`0a2316f`).

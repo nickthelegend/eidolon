@@ -18,7 +18,7 @@ An optional language model writes one taunt line from the recalled facts. It can
 
 ## How it uses Walrus Memory
 
-The ghost's memory is meant to live in Walrus Memory, through the `@mysten-incubation/memwal` SDK on the mainnet relayer. Each player gets their own namespace.
+The ghost's memory lives in Walrus Memory, through the `@mysten-incubation/memwal` SDK on the mainnet relayer. Each player gets their own namespace.
 
 The loop works like this:
 
@@ -29,9 +29,9 @@ The loop works like this:
 
 So the ghost reflects how you trade in this kind of market at this hour, not a lifetime average.
 
-Eidolon can also import a wallet's earlier settled Predict trades into Walrus Memory, so an experienced trader starts with a ghost that already knows them.
+Eidolon can also import a wallet's earlier settled Predict trades into Walrus Memory, so an experienced trader starts with a ghost that already knows them. Storing that history moves no funds, so it needs only the Walrus keys.
 
-**Honest status:** Walrus Memory isn't writing on mainnet yet. The code path is finished and fails loudly with "Setup required" without keys, but the mainnet account ID and delegate key are still pending. Today 0 memories are stored, and the event requires at least 10. After the mainnet run, the first blob IDs go in the README.
+**Honest status:** Walrus Memory is live on mainnet. Eidolon has stored 31 memories there: one test write, then 30 settled trades of a public Predict trader whose owner is unknown. The event requires at least 10. All the blob IDs are in the README. Eidolon signs with its own delegate key on one shared Walrus Memory account. Without keys, the code still fails loudly with "Setup required". What is not done yet: a funded player round on mainnet, and the ghost placing its bet automatically. Both wait on funding the wallets.
 
 ## How it uses Tatum
 
@@ -41,14 +41,16 @@ Two limits came up. Tatum's gateway refuses `ListEvents`, which the history impo
 
 ## How it learned over time
 
-Eidolon's learning is meant to be concrete: each settled round adds a memory, and the next ghost is rebuilt from the memories that match the moment. Over many rounds the ghost's size tracks your actual sizing, its pressure rises when your hit rate drops, and the context filter makes it sharper in the situations you trade most. That loop starts on mainnet once the Walrus keys are in. **PENDING.**
+Eidolon's learning is concrete: each settled round adds a memory, and the next ghost is rebuilt from the memories that match the moment. Over many rounds the ghost's size tracks your actual sizing, its pressure rises when your hit rate drops, and the context filter makes it sharper in the situations you trade most.
 
-The same policy already runs today on real on-chain history. Eidolon rebuilds any address's settled Predict trades from mainnet events, matching each order, fill and payout and checking the payout against the settled market. On one public trader with 15 settled trades, the ghost read a 27% UP share and a 73% hit rate, then chose DOWN for 4.87 USDC at the nearest admissible strike, at 49% odds. The app labels this ghost "Not on Walrus yet", because no Walrus memory exists for it.
+On Nov 9 that loop ran on Walrus mainnet for the first time. Eidolon picked one of the most active traders in recent Predict orders and stored 30 of their real settled trades as memories, from 15:38:21 to 15:40:38 UTC. Then it recalled them. Recall returned 31 memories: the 30 trades plus one earlier test write. The ghost built from them read a 32% UP share, an 81% hit rate and an average bet of 4.84 USDC. Every one of those numbers came back from Walrus, not from a local cache. The round-by-round loop, where each new Eidolon round becomes a memory, is still **PENDING** on the first funded round.
 
-The project learned too. The first recorded take showed an empty ghost panel, so the ghost now comes from on-chain history when memory isn't configured. Rehearsals on a local fork of Sui mainnet showed that a 1 USDC order fails Predict's minimum once fees and whole lots are counted, so the demo uses 2 USDC.
+The same policy already runs today on real on-chain history. Eidolon rebuilds any address's settled Predict trades from mainnet events, matching each order, fill and payout and checking the payout against the settled market. On one public trader with 15 settled trades, the ghost read a 27% UP share and a 73% hit rate, then chose DOWN for 4.87 USDC at the nearest admissible strike, at 49% odds. When Walrus Memory is not configured on the server, the app shows this ghost and labels it "Not on Walrus yet".
+
+The project learned too. The first recorded take showed an empty ghost panel, so the ghost now comes from on-chain history when memory isn't configured. Rehearsals on a local fork of Sui mainnet showed that a 1 USDC order fails Predict's minimum once fees and whole lots are counted, so the demo uses 2 USDC. The first Walrus writes on mainnet showed that blobs take over 60 seconds to certify, so writes now wait up to 5 minutes, and history goes in as bulk jobs of 20.
 
 ## What's next
 
-The mainnet run: keys in, one funded player round, then a second round where the ghost recalls the first from Walrus and bets against it. Until then, everything above is labelled live, fork-only or pending.
+The funded mainnet run: fund the wallets, play one player round, then a second round where the ghost recalls the first from Walrus and bets against it. Until then, everything above is labelled live, fork-only or pending.
 
 Code: `<repo link, public after Nick's yes>`. Film: `videos/eidolon/eidolon-film-v2.mp4` (link after upload).
