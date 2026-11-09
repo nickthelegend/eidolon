@@ -49,6 +49,24 @@ export type FundingPlan = {
   rpc: string;
 };
 
+export type HistoricalTrade = {
+  side: Side;
+  strike: number;
+  size: number;
+  hit: boolean;
+  pnl: number;
+  fillDigest: string;
+  payoutDigest: string;
+  enqueueDigest: string;
+  createdAt: string;
+};
+export type HistoryResponse = {
+  trades: HistoricalTrade[];
+  profile: GhostProfile & { averageSize: number };
+  decision: { side: Side; size: number; profile: GhostProfile } | null;
+  source: string;
+};
+
 export type Leg = { digest: string; pnl?: number; fillDigest?: string; payoutDigest?: string };
 
 export type GhostProfile = {

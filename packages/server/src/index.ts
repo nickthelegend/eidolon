@@ -9,6 +9,7 @@ import {
   ghostDecision,
   ghostStrike,
   habitProfile,
+  predictHistory,
   type Context,
   type Hit,
   type TradeMemory,
@@ -79,6 +80,7 @@ const prepared = new Map<
   }
 >();
 const preparedFunding = new Map<string, number>();
+let lastHistoryRememberAt = 0;
 const executed = new Map<string, NonNullable<ReturnType<typeof prepared.get>>>();
 function broadcast(value: unknown) {
   for (const res of clients) res.write(`data: ${JSON.stringify(value)}\n\n`);
@@ -259,6 +261,47 @@ const server = createServer(async (req, res) => {
           }, {}),
         ),
       );
+      return;
+    }
+    const historyPath = url.pathname.match(/^\/history\/(0x[0-9a-f]{64})(\/remember)?$/i);
+    if (historyPath) {
+      const address = historyPath[1].toLowerCase();
+      if (historyPath[2]) {
+        if (req.method !== 'POST') throw new Error('Method not allowed');
+        if (!process.env.MEMWAL_MAINNET_KEY) throw new Error('Setup required: MEMWAL_MAINNET_KEY');
+        if (!process.env.MEMWAL_MAINNET_ACCOUNT_ID) throw new Error('Setup required: MEMWAL_MAINNET_ACCOUNT_ID');
+        if (process.env.EIDOLON_ALLOW_MAINNET !== 'I_ACKNOWLEDGE_REAL_USDC') throw new Error('Dry-run only');
+        const trades = await predictHistory(address, { limit: 200 });
+        const memory = memoryFor(address);
+        const blobIds: string[] = [];
+        for (const trade of trades) {
+          const wait = Math.max(0, 1500 - (Date.now() - lastHistoryRememberAt));
+          if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+          lastHistoryRememberAt = Date.now();
+          blobIds.push(await memory.remember(trade));
+        }
+        respond(res, 200, { blobIds });
+        return;
+      }
+      if (req.method !== 'GET') throw new Error('Method not allowed');
+      const trades = await predictHistory(address, { limit: Number(url.searchParams.get('limit') ?? 20) });
+      const hits: Hit[] = trades.map((trade) => ({ blobId: trade.fillDigest, memory: trade }));
+      const profile = habitProfile(hits);
+      let decision: ReturnType<typeof ghostDecision> | null = null;
+      const marketId = url.searchParams.get('marketId');
+      const side = url.searchParams.get('side');
+      if (trades.length && marketId && (side === 'up' || side === 'down')) {
+        const selected = (await marketList()).find((m) => m.id === marketId);
+        if (selected?.forward != null) {
+          const strike = side === 'up' ? selected.suggestedStrike : selected.suggestedStrikeDown;
+          if (strike != null) {
+            const liveContext = context(selected.cadence, strike, selected.forward);
+            const picked = ghostDecision(side, hits, liveContext, Number(process.env.EIDOLON_GHOST_MAX_USDC ?? 5));
+            decision = { ...picked, blobIds: [] };
+          }
+        }
+      }
+      respond(res, 200, { trades, profile, decision, source: 'on-chain history, not yet in Walrus memory' });
       return;
     }
     if (url.pathname.startsWith('/ghost/')) {

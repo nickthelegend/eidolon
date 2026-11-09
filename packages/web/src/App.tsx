@@ -5,6 +5,7 @@ import { api, post, usd, usdc, type FundingPlan, type Market, type Plan, type Ro
 import { Countdown } from './components/Countdown';
 import { DuelBar } from './components/DuelBar';
 import { GhostPanel } from './components/GhostPanel';
+import { HistoryPanel } from './components/HistoryPanel';
 import { Leaderboard, Rounds } from './components/Rounds';
 
 export function App() {
@@ -21,6 +22,28 @@ export function App() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [viewInput, setViewInput] = useState(new URLSearchParams(window.location.search).get('as') ?? '');
+  const [viewAddress, setViewAddress] = useState(() => {
+    const value = new URLSearchParams(window.location.search).get('as') ?? '';
+    return /^0x[0-9a-f]{64}$/i.test(value) ? value.toLowerCase() : '';
+  });
+  const owner = account?.address ?? (viewAddress || undefined);
+  const readOnly = !account && Boolean(viewAddress);
+
+  function applyViewAddress() {
+    const value = viewInput.trim();
+    if (value && !/^0x[0-9a-f]{64}$/i.test(value)) {
+      setError('Enter a 0x address with 64 hexadecimal characters');
+      return;
+    }
+    setError('');
+    setViewAddress(value.toLowerCase());
+    setPreview(null);
+    const url = new URL(window.location.href);
+    if (value) url.searchParams.set('as', value.toLowerCase());
+    else url.searchParams.delete('as');
+    window.history.replaceState(null, '', url);
+  }
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -54,8 +77,8 @@ export function App() {
   const market = markets.find((m) => m.id === marketId);
   const forward = markets.find((m) => m.forward != null)?.forward ?? null;
   const mine = useMemo(
-    () => rounds.filter((r) => r.player === account?.address.toLowerCase()),
-    [rounds, account?.address],
+    () => rounds.filter((r) => r.player === owner?.toLowerCase()),
+    [rounds, owner],
   );
   const settled = mine.filter((r) => r.status === 'settled');
   const youPnl = settled.reduce((n, r) => n + (r.playerLeg?.pnl ?? 0), 0);
@@ -77,11 +100,11 @@ export function App() {
 
   const planBet = () =>
     run('plan', async () => {
-      if (!account || !market) return;
+      if (!owner || !market) return;
       setPreview(null);
       setPreview(
         await post<Plan>('/plan', {
-          owner: account.address,
+          owner,
           marketId,
           side,
           amount: Number(amount),
@@ -152,6 +175,7 @@ export function App() {
         </div>
       )}
       {status?.chainError && <div className="alert">Chain: {status.chainError}</div>}
+      {readOnly && <div className="setup" role="status">Viewing as {owner?.slice(0, 6)}…{owner?.slice(-4)} (read-only, not your wallet)</div>}
       {error && (
         <div className="alert" role="alert">
           {error}
@@ -164,6 +188,15 @@ export function App() {
             <h2 id="arena-title">Arena</h2>
             <p className="muted small">Live markets from Sui mainnet · min 1 USDC · 0.02 USDC order fee</p>
           </header>
+
+          {!account && (
+            <div className="fields">
+              <label>View as address
+                <input value={viewInput} onChange={(e) => setViewInput(e.target.value)} placeholder="0x…" />
+              </label>
+              <button onClick={applyViewAddress}>View address</button>
+            </div>
+          )}
 
           <div className="markets" role="radiogroup" aria-label="Market">
             {markets.length === 0 && <p className="muted">Loading live markets…</p>}
@@ -239,8 +272,8 @@ export function App() {
                 />
               </label>
             </div>
-            <button className="primary" disabled={!account || !market || busy !== null} onClick={planBet}>
-              {busy === 'plan' ? 'Quoting on mainnet…' : account ? 'Quote and dry-run' : 'Connect a Sui wallet to bet'}
+            <button className="primary" disabled={!owner || !market || busy !== null} onClick={planBet}>
+              {busy === 'plan' ? 'Quoting on mainnet…' : owner ? 'Quote and dry-run' : 'Connect a Sui wallet or view an address'}
             </button>
           </div>
 
@@ -274,7 +307,7 @@ export function App() {
                   : 'not available: fund your Predict account first'}
               </p>
               {preview.dryRun?.status.status === 'success' &&
-                (live ? (
+                (live && !readOnly && account ? (
                   <button className="primary ember" disabled={busy !== null} onClick={trade}>
                     {busy === 'trade' ? 'Signing…' : 'Sign and queue the real order'}
                   </button>
@@ -284,9 +317,10 @@ export function App() {
             </div>
           )}
 
-          <Funding live={live} owner={account?.address} signAndSend={signAndSend} />
+          <Funding live={live && !readOnly && Boolean(account)} owner={owner} signAndSend={signAndSend} />
         </section>
 
+        <HistoryPanel owner={owner} marketId={marketId} side={side} readOnly={readOnly} live={live} setup={status?.setup ?? []} />
         <GhostPanel status={status} round={mine.at(-1)} />
 
         <Rounds rounds={mine} />
@@ -296,7 +330,7 @@ export function App() {
       <footer className="foot">
         <p>
           Markets and settlement: DeepBook Predict (Pyth price at expiry). Memory: Walrus Memory on mainnet.
-          Chain reads: Tatum Sui RPC. Every number here comes from chain or from your own recalled memories.
+          Chain reads: {status?.rpc ?? 'loading'}. Every number here comes from chain or from your own recalled memories.
         </p>
       </footer>
     </div>
