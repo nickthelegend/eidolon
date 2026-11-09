@@ -14,12 +14,11 @@ import {
   type Hit,
   type TradeMemory,
 } from '@eidolon/core';
-import { toBase64 } from '@mysten/sui/utils';
-import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+import { fromBase64, toBase64 } from '@mysten/sui/utils';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { cost, decodeMoveAbort, describePredictError } from '@mysten/deepbook-v3/predict';
 
-// Turns a Predict Move abort (structured from gRPC, or the JSON-RPC error string) into the SDK's own plain sentence,
+// Turns a Predict Move abort into the SDK's own plain sentence,
 // keeping the module::constant so the chain error stays checkable. Returns null when the error is not a Move abort.
 function explainAbort(err: unknown): string | null {
   const pe = err as any;
@@ -341,17 +340,12 @@ const server = createServer(async (req, res) => {
       transaction.setSender(input.owner);
       const bytes = await transaction.build({ client: c.client });
       const encoded = toBase64(bytes);
-      const dry =
-        c.client instanceof SuiJsonRpcClient
-          ? await c.client
-              .dryRunTransactionBlock({ transactionBlock: bytes })
-              .then((x) => ({ status: x.effects.status.status, error: x.effects.status.error ? (explainAbort(x.effects.status.error) ?? x.effects.status.error) : null }))
-          : await c.client.core
-              .simulateTransaction({ transaction: bytes, include: { effects: true } })
-              .then((x) => ({
-                status: x.$kind === 'Transaction' ? 'success' : 'failure',
-                error: x.$kind === 'FailedTransaction' ? (explainAbort(x.FailedTransaction.status.error) ?? x.FailedTransaction.status.error?.message ?? null) : null,
-              }));
+      const dry = await c.client.core
+        .simulateTransaction({ transaction: bytes, include: { effects: true } })
+        .then((x) => ({
+          status: x.$kind === 'Transaction' ? 'success' : 'failure',
+          error: x.$kind === 'FailedTransaction' ? (explainAbort(x.FailedTransaction.status.error) ?? x.FailedTransaction.status.error?.message ?? null) : null,
+        }));
       if (dry.status === 'success') preparedFunding.set(encoded, Date.now());
       respond(res, 200, {
         dryRun: dry,
@@ -416,33 +410,28 @@ const server = createServer(async (req, res) => {
         built.transaction.setSender(input.owner);
         const bytes = await built.transaction.build({ client: c.client });
         transaction = toBase64(bytes);
-        if (c.client instanceof SuiJsonRpcClient) {
-          const result = await c.client.dryRunTransactionBlock({ transactionBlock: bytes });
-          dryRun = { status: result.effects.status.error ? { ...result.effects.status, error: explainAbort(result.effects.status.error) ?? result.effects.status.error } : result.effects.status, events: result.events?.length ?? 0, rpc: c.rpc };
-          if (result.effects.status.status === 'success')
-            prepared.set(transaction, {
-              player: input.owner.toLowerCase(),
-              marketId: m.id,
-              side: input.side,
-              strike: strike ?? m.referencePrice ?? 0,
-              size: amount,
-              expiryMs: m.expiryMs,
-              createdAt: Date.now(),
-            });
-        } else {
-          const result = await c.client.core.simulateTransaction({
-            transaction: bytes,
-            include: { effects: true, events: true },
+        const result = await c.client.core.simulateTransaction({
+          transaction: bytes,
+          include: { effects: true, events: true },
+        });
+        dryRun = {
+          status:
+            result.$kind === 'Transaction'
+              ? { status: 'success' }
+              : { status: 'failure', error: explainAbort(result.FailedTransaction.status.error) ?? result.FailedTransaction.status.error?.message },
+          events: result.$kind === 'Transaction' ? (result.Transaction.events?.length ?? 0) : 0,
+          rpc: c.rpc,
+        };
+        if (result.$kind === 'Transaction')
+          prepared.set(transaction, {
+            player: input.owner.toLowerCase(),
+            marketId: m.id,
+            side: input.side,
+            strike: strike ?? m.referencePrice ?? 0,
+            size: amount,
+            expiryMs: m.expiryMs,
+            createdAt: Date.now(),
           });
-          dryRun = {
-            status:
-              result.$kind === 'Transaction'
-                ? { status: 'success' }
-                : { status: 'failure', error: explainAbort(result.FailedTransaction.status.error) ?? result.FailedTransaction.status.error?.message },
-            events: result.$kind === 'Transaction' ? (result.Transaction.events?.length ?? 0) : 0,
-            rpc: c.rpc,
-          };
-        }
       }
       respond(res, 200, {
         marketId: m.id,
@@ -473,6 +462,8 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/execute' && req.method === 'POST') {
       if (process.env.EIDOLON_ALLOW_MAINNET !== 'I_ACKNOWLEDGE_REAL_USDC')
         throw new Error('Dry-run only: mainnet writes disabled');
+      if (!process.env.TATUM_API_KEY)
+        throw new Error('Setup required: TATUM_API_KEY for mainnet writes');
       if (!process.env.MEMWAL_MAINNET_KEY || !process.env.MEMWAL_MAINNET_ACCOUNT_ID)
         throw new Error('Setup required: Walrus Memory before live trading');
       if (!process.env.EIDOLON_GHOST_KEY)
@@ -485,36 +476,35 @@ const server = createServer(async (req, res) => {
       prepared.delete(input.bytes);
       preparedFunding.delete(input.bytes);
       const c = chain();
-      if (!(c.client instanceof SuiJsonRpcClient))
-        throw new Error('Tatum JSON-RPC required for mainnet writes');
-      const tx = await c.client.executeTransactionBlock({
-        transactionBlock: input.bytes,
-        signature: input.signature,
-        options: { showInput: true, showEffects: true, showEvents: true },
+      const tx = await c.client.core.executeTransaction({
+        transaction: fromBase64(input.bytes),
+        signatures: [input.signature],
+        include: { effects: true, events: true },
       });
-      if (tx.effects?.status.status !== 'success')
-        throw new Error(`Transaction failed: ${tx.effects?.status.error ?? 'unknown'}`);
-      if (p) executed.set(tx.digest, p);
-      respond(res, 200, { digest: tx.digest, rpc: c.rpc, kind: p ? 'trade' : 'funding' });
+      const outcome = tx.$kind === 'Transaction' ? tx.Transaction : tx.FailedTransaction;
+      if (!outcome.effects?.status.success)
+        throw new Error(`Transaction failed: ${outcome.effects?.status.error?.message ?? outcome.status.error?.message ?? 'unknown'}`);
+      if (p) executed.set(outcome.digest, p);
+      respond(res, 200, { digest: outcome.digest, rpc: c.rpc, kind: p ? 'trade' : 'funding' });
       return;
     }
     if (url.pathname === '/rounds' && req.method === 'POST') {
       if (process.env.EIDOLON_ALLOW_MAINNET !== 'I_ACKNOWLEDGE_REAL_USDC')
         throw new Error('Dry-run only: mainnet writes disabled');
+      if (!process.env.TATUM_API_KEY)
+        throw new Error('Setup required: TATUM_API_KEY for mainnet writes');
       const input = await body(req);
       const p = executed.get(input.digest);
       if (!p) throw new Error('Digest was not executed from an Eidolon plan');
       if (rounds.some((r) => r.digest === input.digest)) throw new Error('Digest already registered');
       const c = chain();
-      if (!(c.client instanceof SuiJsonRpcClient))
-        throw new Error('Tatum JSON-RPC required for mainnet writes');
-      const tx = await c.client.getTransactionBlock({
+      const result = await c.client.core.getTransaction({
         digest: input.digest,
-        options: { showInput: true, showEffects: true, showEvents: true },
+        include: { transaction: true, effects: true, events: true },
       });
-      if (tx.effects?.status.status !== 'success' || tx.transaction?.data.sender?.toLowerCase() !== p.player)
+      if (result.$kind !== 'Transaction' || !result.Transaction.effects.status.success || result.Transaction.transaction?.sender?.toLowerCase() !== p.player)
         throw new Error('Unverified player transaction');
-      const receipt = c.predict.decode.enqueue(tx);
+      const receipt = c.predict.decode.enqueue(result.Transaction);
       if (receipt.marketId !== p.marketId || receipt.side !== 'mint')
         throw new Error('Enqueue receipt differs from reviewed plan');
       const cadence = p.expiryMs % 300_000 === 0 ? 5 : 1;
@@ -546,7 +536,6 @@ const server = createServer(async (req, res) => {
 });
 
 async function findQueueEvent(
-  client: SuiJsonRpcClient,
   c: ReturnType<typeof chain>,
   name: string,
   marketId: string,
@@ -555,29 +544,29 @@ async function findQueueEvent(
 ) {
   const packageId = c.config.packages.predictOrdersV1 ?? c.config.packages.predictOrders;
   if (!packageId) throw new Error('Predict queue event package missing from SDK config');
-  let cursor: { txDigest: string; eventSeq: string } | null = null;
+  let before: string | null = null;
   for (let page = 0; page < 20; page++) {
-    const result = await client.queryEvents({
-      query: { MoveEventType: `${packageId}::queue_events::${name}` },
-      cursor,
+    const result = await c.client.core.listEvents({
+      filter: { eventType: `${packageId}::queue_events::${name}` },
       limit: 50,
       order: 'descending',
+      ...(before ? { before } : {}),
     });
-    for (const event of result.data) {
-      const data = event.parsedJson as Record<string, unknown>;
+    for (const event of result.events) {
+      const data = event.json;
       if (
-        String(data.expiry_market_id).toLowerCase() === marketId.toLowerCase() &&
-        String(data.record_id) === recordId
+        String(data?.expiry_market_id).toLowerCase() === marketId.toLowerCase() &&
+        String(data?.record_id) === recordId
       )
-        return event.id.txDigest;
+        return event.transactionDigest;
     }
     if (
       !result.hasNextPage ||
-      !result.data.length ||
-      Number(result.data.at(-1)?.timestampMs ?? 0) < earliestMs
+      !result.endCursor || result.endCursor === before ||
+      (result.events.length > 0 && Number(result.events.at(-1)?.json?.onchain_timestamp_ms ?? Infinity) < earliestMs)
     )
       break;
-    cursor = result.nextCursor ?? null;
+    before = result.endCursor;
   }
   return null;
 }
@@ -588,10 +577,11 @@ async function filledLeg(
   recordId: string,
   earliestMs: number,
 ): Promise<Leg | null> {
-  if (!(c.client instanceof SuiJsonRpcClient)) return null;
-  const fillDigest = await findQueueEvent(c.client, c, 'QueuedOrderFilled', marketId, recordId, earliestMs);
+  const fillDigest = await findQueueEvent(c, 'QueuedOrderFilled', marketId, recordId, earliestMs);
   if (!fillDigest) return null;
-  const tx = await c.client.getTransactionBlock({ digest: fillDigest, options: { showEvents: true } });
+  const result = await c.client.core.getTransaction({ digest: fillDigest, include: { events: true } });
+  if (result.$kind !== 'Transaction') throw new Error(`Fill transaction failed: ${fillDigest}`);
+  const tx = result.Transaction;
   const fill = c.predict.decode
     .queuedFills(tx)
     .find((x) => x.marketId === marketId && String(x.recordId) === recordId);
@@ -693,7 +683,6 @@ async function placeGhost(round: Round, hits: Hit[]) {
     return;
   }
   const c = chain();
-  if (!(c.client instanceof SuiJsonRpcClient)) throw new Error('Tatum required for ghost writes');
   if ((await c.predict.read.balance(owner)) < decision.size) {
     round.ghost.status = 'ghost Predict balance too low';
     return;
@@ -719,24 +708,25 @@ async function placeGhost(round: Round, hits: Hit[]) {
   const { transaction } = await c.predict.tx.enqueuePlan(owner, descriptor, quote);
   transaction.setSender(owner);
   const bytes = await transaction.build({ client: c.client });
-  const dry = await c.client.dryRunTransactionBlock({ transactionBlock: bytes });
-  if (dry.effects.status.status !== 'success') {
-    round.ghost.status = `dry-run failed: ${dry.effects.status.error ?? 'unknown'}`;
+  const dry = await c.client.core.simulateTransaction({ transaction: bytes, include: { effects: true, events: true } });
+  if (dry.$kind !== 'Transaction') {
+    round.ghost.status = `dry-run failed: ${explainAbort(dry.FailedTransaction.status.error) ?? dry.FailedTransaction.status.error?.message ?? 'unknown'}`;
     return;
   }
-  const sent = await c.client.signAndExecuteTransaction({
+  const signature = await keypair.signTransaction(bytes);
+  const sent = await c.client.core.executeTransaction({
     transaction: bytes,
-    signer: keypair,
-    options: { showEvents: true, showEffects: true },
+    signatures: [signature.signature],
+    include: { events: true, effects: true },
   });
-  if (sent.effects?.status.status !== 'success') {
+  if (sent.$kind !== 'Transaction' || !sent.Transaction.effects.status.success) {
     round.ghost.status = 'onchain enqueue failed';
     return;
   }
-  const receipt = c.predict.decode.enqueue(sent);
+  const receipt = c.predict.decode.enqueue(sent.Transaction);
   round.ghost.status = 'enqueued';
   round.ghost.leg = {
-    digest: sent.digest,
+    digest: sent.Transaction.digest,
     recordId: String(receipt.recordId),
     orderId: '',
     cost: 0,
@@ -750,10 +740,11 @@ async function paidLeg(
   marketId: string,
   earliestMs: number,
 ): Promise<boolean> {
-  if (!(c.client instanceof SuiJsonRpcClient)) return false;
-  const digest = await findQueueEvent(c.client, c, 'OpenRecordSettled', marketId, leg.recordId, earliestMs);
+  const digest = await findQueueEvent(c, 'OpenRecordSettled', marketId, leg.recordId, earliestMs);
   if (!digest) return false;
-  const tx = await c.client.getTransactionBlock({ digest, options: { showEvents: true } });
+  const result = await c.client.core.getTransaction({ digest, include: { events: true } });
+  if (result.$kind !== 'Transaction') throw new Error(`Payout transaction failed: ${digest}`);
+  const tx = result.Transaction;
   const paid = c.predict.decode
     .openRecordPayouts(tx)
     .find((x) => x.marketId === marketId && String(x.recordId) === leg.recordId && !x.skipped);
