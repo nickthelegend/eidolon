@@ -22,6 +22,10 @@ import { cost, decodeMoveAbort, describePredictError } from '@mysten/deepbook-v3
 // Turns a Predict Move abort (structured from gRPC, or the JSON-RPC error string) into the SDK's own plain sentence,
 // keeping the module::constant so the chain error stays checkable. Returns null when the error is not a Move abort.
 function explainAbort(err: unknown): string | null {
+  const pe = err as any;
+  // The SDK's own PredictMoveError already carries module and constant name.
+  if (pe && typeof pe === 'object' && typeof pe.module === 'string' && 'abortName' in pe && !pe.MoveAbort)
+    return `${describePredictError(pe) ?? 'Predict refused this transaction.'} (${pe.module}::${pe.abortName ?? `code ${pe.code}`})`;
   let e: any = err;
   const text = typeof err === 'string' ? err : typeof (err as any)?.message === 'string' ? (err as any).message : '';
   if (!e?.MoveAbort && text) {
