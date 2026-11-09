@@ -623,6 +623,16 @@ button.primary.ember {
   line-height: 1.4;
   margin: 0 0 14px;
 }
+.ghost-note {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border: 1px dashed rgba(217, 249, 157, 0.35);
+  border-radius: 10px;
+  color: var(--muted, #a1a1aa);
+}
+.ghost-note b {
+  color: var(--spectral);
+}
 .ghost-bet {
   display: flex;
   gap: 10px;

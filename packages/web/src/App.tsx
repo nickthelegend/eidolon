@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCurrentAccount, useDAppKit } from '@mysten/dapp-kit-react';
 import { ConnectButton } from '@mysten/dapp-kit-react/ui';
-import { api, post, usd, usdc, type FundingPlan, type Market, type Plan, type Round, type Side, type Status } from './api';
+import { api, post, usd, usdc, type FundingPlan, type Market, type Plan, type Round, type Side, type Status, humanError, type HistoryResponse } from './api';
 import { Countdown } from './components/Countdown';
 import { DuelBar } from './components/DuelBar';
 import { GhostPanel } from './components/GhostPanel';
@@ -20,6 +20,8 @@ export function App() {
   const [strike, setStrike] = useState('');
   const [preview, setPreview] = useState<Plan | null>(null);
   const [error, setError] = useState('');
+  const [errorAt, setErrorAt] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistoryResponse | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const [viewInput, setViewInput] = useState(new URLSearchParams(window.location.search).get('as') ?? '');
@@ -89,10 +91,12 @@ export function App() {
   async function run<T>(label: string, fn: () => Promise<T>) {
     setBusy(label);
     setError('');
+    setErrorAt(null);
     try {
       return await fn();
     } catch (e) {
       setError(String((e as Error).message ?? e));
+      setErrorAt(label);
     } finally {
       setBusy(null);
     }
@@ -176,7 +180,7 @@ export function App() {
       )}
       {status?.chainError && <div className="alert">Chain: {status.chainError}</div>}
       {readOnly && <div className="setup" role="status">Viewing as {owner?.slice(0, 6)}…{owner?.slice(-4)} (read-only, not your wallet)</div>}
-      {error && (
+      {error && errorAt !== 'plan' && (
         <div className="alert" role="alert">
           {error}
         </div>
@@ -208,7 +212,7 @@ export function App() {
 
           <div className="markets" role="radiogroup" aria-label="Market">
             {markets.length === 0 && <p className="muted">Loading live markets…</p>}
-            {markets.map((m) => (
+            {markets.filter((m) => m.expiryMs > now || m.id === marketId).map((m) => (
               <button
                 key={m.id}
                 role="radio"
@@ -285,6 +289,15 @@ export function App() {
             </button>
           </div>
 
+          {error && errorAt === 'plan' && (
+            <div className="quote refused" role="alert">
+              <div className="quote-row">
+                <span>Predict refuses this bet</span>
+              </div>
+              <p className="small">{error}</p>
+            </div>
+          )}
+
           {preview && forward != null && preview.strike != null && (
             <DuelBar forward={forward} side={side} strike={preview.strike} ghost={preview.ghostPreview} />
           )}
@@ -328,8 +341,8 @@ export function App() {
           <Funding live={live && !readOnly && Boolean(account)} owner={owner} signAndSend={signAndSend} />
         </section>
 
-        <GhostPanel status={status} round={mine.at(-1)} />
-        <HistoryPanel owner={owner} marketId={marketId} side={side} readOnly={readOnly} live={live} setup={status?.setup ?? []} />
+        <GhostPanel status={status} round={mine.at(-1)} history={history} side={side} preview={preview} />
+        <HistoryPanel owner={owner} marketId={marketId} side={side} readOnly={readOnly} live={live} setup={status?.setup ?? []} onHistory={setHistory} />
 
         <Rounds rounds={mine} />
         <Leaderboard />
@@ -397,7 +410,7 @@ function Funding({
       {plan && (
         <p className="muted small">
           Dry-run {plan.dryRun.status} via {plan.rpc}
-          {plan.dryRun.error ? `: ${plan.dryRun.error}` : ''}
+          {plan.dryRun.error ? `: ${humanError(plan.dryRun.error)}` : ''}
         </p>
       )}
       {plan?.transaction && live && (

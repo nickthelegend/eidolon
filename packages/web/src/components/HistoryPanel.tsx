@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 import { api, pct, post, short, suiscan, usdc, type HistoryResponse, type Side } from '../api';
 
-export function HistoryPanel({ owner, marketId, side, readOnly, live, setup }: {
+export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onHistory }: {
   owner: string | undefined;
   marketId: string;
   side: Side;
   readOnly: boolean;
   live: boolean;
   setup: string[];
+  onHistory?: (history: HistoryResponse | null) => void;
 }) {
   const [history, setHistory] = useState<HistoryResponse | null>(null);
+  useEffect(() => onHistory?.(history), [history]);
   const [loadedOwner, setLoadedOwner] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');

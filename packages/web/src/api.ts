@@ -117,7 +117,7 @@ export type LeaderRow = {
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, init);
   const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-  if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+  if (!res.ok) throw new Error(humanError(String(body.error ?? `HTTP ${res.status}`)));
   return body as T;
 }
 
@@ -139,3 +139,21 @@ export const usdc = (n: number | null | undefined) =>
 export const pct = (p: number) => `${Math.round(p * 100)}%`;
 export const suiscan = (digest: string) => `https://suiscan.xyz/mainnet/tx/${digest}`;
 export const walruscan = (blob: string) => `https://walruscan.com/mainnet/blob/${blob}`;
+
+const pctText = (p: number) => (p < 0.001 ? 'under 0.1%' : `${(p * 100).toFixed(1)}%`);
+
+/** Turns raw chain and SDK errors into one plain sentence. Keeps every real number; drops type prefixes and base units. */
+export function humanError(raw: string): string {
+  let s = raw.replace(/^(?:\w*Error:\s*)+/, '');
+  s = s.replace(
+    /the (up|down) probability ([0-9.e-]+) is outside the market's entry band \[([0-9.]+), ([0-9.]+)\]/i,
+    (_, side: string, p: string, a: string, b: string) =>
+      `Predict prices this ${side.toUpperCase()} bet at ${pctText(Number(p))}, outside its ${Number(a) * 100}–${Number(b) * 100}% entry band`,
+  );
+  s = s.replace(
+    /Insufficient balance of 0x[0-9a-f]+::usdc::USDC for owner (0x[0-9a-f]{64})\. Required: (\d+), Available: (\d+)/i,
+    (_, owner: string, req: string, avail: string) =>
+      `${short(owner)} holds ${(Number(avail) / 1e6).toFixed(2)} USDC in its wallet; this deposit needs ${(Number(req) / 1e6).toFixed(2)} USDC`,
+  );
+  return s;
+}
