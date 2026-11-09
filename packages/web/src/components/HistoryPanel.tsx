@@ -21,11 +21,11 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
   const rememberDisabled = !owner || Boolean(missingMemory) || !history?.trades.length || busy;
   const rememberLabel = missingMemory ?? (readOnly ? 'Remember this trader on Walrus' : 'Teach my ghost (write to Walrus)');
 
-  async function load() {
+  async function load(keepMessage = false) {
     if (!owner) return;
     setBusy(true);
     onBusy?.(true);
-    setMessage('');
+    if (!keepMessage) setMessage('');
     try {
       const query = new URLSearchParams({ marketId, side, limit: '20' });
       setHistory(await api<HistoryResponse>(`/history/${owner}?${query}`));
@@ -64,7 +64,7 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
     } finally {
       setBusy(false);
     }
-    if (stored) await load(); // the ghost now rebuilds from what Walrus recalls
+    if (stored) await load(true); // the ghost now rebuilds from what Walrus recalls; keep the result on screen
   }
 
   const [expanded, setExpanded] = useState(false);
@@ -89,7 +89,7 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
               Your ghost can start from what you already did: every settled Predict trade with its fill and payout,
               straight from the chain. Takes about 20 seconds.
             </p>
-            <button className="primary" disabled={!owner || busy} onClick={load}>
+            <button className="primary" disabled={!owner || busy} onClick={() => load()}>
               {busy ? (
                 <>
                   <span className="spin" aria-hidden /> Reading mainnet…
