@@ -706,6 +706,7 @@ async function filledLeg(
   };
 }
 let ghostQueue = Promise.resolve();
+const PREDICT_MIN_USDC = 2;
 async function narrate(hits: Hit[], decision: ReturnType<typeof ghostDecision>): Promise<string | undefined> {
   if (!process.env.OPENROUTER_API_KEY) return undefined;
   const facts = hits
@@ -756,13 +757,13 @@ async function placeGhost(round: Round, hits: Hit[]) {
   );
   round.ghost = {
     side: decision.side,
-    size: decision.size,
+    size: Math.max(PREDICT_MIN_USDC, decision.size),
     profile: decision.profile,
     recalledBlobIds: decision.blobIds,
     status: 'recalled',
   };
   try {
-    round.ghost.line = await narrate(hits, decision);
+    round.ghost.line = await narrate(hits, { ...decision, size: round.ghost.size });
   } catch {
     /* narration is optional, policy is fixed */
   }
@@ -787,12 +788,12 @@ async function placeGhost(round: Round, hits: Hit[]) {
   const spent = rounds
     .filter((r) => r.ghost?.leg && r.createdAt.slice(0, 10) === new Date().toISOString().slice(0, 10))
     .reduce((n, r) => n + (r.ghost?.size ?? 0), 0);
-  if (spent + decision.size > maxDaily) {
+  if (spent + round.ghost.size > maxDaily) {
     round.ghost.status = 'daily cap reached';
     return;
   }
   const c = chain();
-  if ((await c.predict.read.balance(owner)) < decision.size) {
+  if ((await c.predict.read.balance(owner)) < round.ghost.size) {
     round.ghost.status = 'ghost Predict balance too low';
     return;
   }
@@ -809,7 +810,7 @@ async function placeGhost(round: Round, hits: Hit[]) {
   }
   round.ghost.strike = pick.strike;
   round.ghost.exactMirror = pick.exact;
-  const { descriptor, quote } = await plan(owner, active, decision.side, decision.size, pick.strike);
+  const { descriptor, quote } = await plan(owner, active, decision.side, round.ghost.size, pick.strike);
   if (!quote.accepting) {
     round.ghost.status = `plan refused: ${quote.refusal}`;
     return;
@@ -1176,8 +1177,9 @@ async function haunt(h: Haunt, m: Awaited<ReturnType<typeof marketList>>[number]
   t.probability = pick.probability;
   step(t, 'pick_strike', `${t.side.toUpperCase()} at $${pick.strike.toLocaleString('en-US')} (${pctLabel(pick.probability)} odds; you'd stand at $${playerStrike.toLocaleString('en-US')})`);
   const decision = ghostDecision(t.playerSide, hits, context(m.cadence, playerStrike, m.forward!), Number(process.env.EIDOLON_GHOST_MAX_USDC ?? 5));
-  t.size = decision.size;
-  step(t, 'size_bet', `${decision.size.toFixed(2)} USDC${profile.hitRate < 0.5 ? ', sized up because you lose more than you win' : ', your own average size'}`);
+  // Predict refuses orders under 2 USDC, so a smaller habit size is raised to that minimum (still under the per-bet cap).
+  t.size = Math.max(PREDICT_MIN_USDC, decision.size);
+  step(t, 'size_bet', `${t.size.toFixed(2)} USDC${decision.size < PREDICT_MIN_USDC ? ` (your ${decision.size.toFixed(2)} average, raised to Predict's 2 USDC minimum)` : profile.hitRate < 0.5 ? ', sized up because you lose more than you win' : ', your own average size'}`);
   const owner = ghostAddress();
   if (!owner) {
     step(t, 'quote', 'Setup required: EIDOLON_GHOST_KEY (the ghost’s own wallet)', false);
@@ -1186,7 +1188,7 @@ async function haunt(h: Haunt, m: Awaited<ReturnType<typeof marketList>>[number]
   }
   let planned: Awaited<ReturnType<typeof plan>>;
   try {
-    planned = await plan(owner, m, t.side, decision.size, pick.strike);
+    planned = await plan(owner, m, t.side, t.size, pick.strike);
   } catch (e) {
     step(t, 'quote', explainAbort(e) ?? safeError(e), false);
     t.status = 'quote failed';
@@ -1231,7 +1233,7 @@ async function haunt(h: Haunt, m: Awaited<ReturnType<typeof marketList>>[number]
   const spent =
     ghostTrades.filter((x) => x.leg && x.createdAt.slice(0, 10) === today).reduce((n, x) => n + x.size, 0) +
     rounds.filter((r) => r.ghost?.leg && r.createdAt.slice(0, 10) === today).reduce((n, r) => n + (r.ghost?.size ?? 0), 0);
-  if (spent + decision.size > maxDaily) {
+  if (spent + t.size > maxDaily) {
     step(t, 'place_order', `Daily cap reached: ${spent.toFixed(2)} of ${maxDaily} USDC spent today`, false);
     t.status = 'daily cap reached';
     return saveGhostTrades();
@@ -1247,7 +1249,7 @@ async function haunt(h: Haunt, m: Awaited<ReturnType<typeof marketList>>[number]
   const receipt = c.predict.decode.enqueue(sent.Transaction);
   t.live = true;
   t.leg = { digest: sent.Transaction.digest, recordId: String(receipt.recordId), orderId: '', cost: 0, premium: 0 };
-  step(t, 'place_order', `Order queued on Sui mainnet: ${sent.Transaction.digest}`);
+  step(t, 'place_order', `Order queued on ${fork ? 'the LOCAL FORK (no real funds)' : 'Sui mainnet'}: ${sent.Transaction.digest}`);
   t.status = 'queued';
   await saveGhostTrades();
   void settleGhost(t);
