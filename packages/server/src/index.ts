@@ -607,7 +607,7 @@ async function narrate(hits: Hit[], decision: ReturnType<typeof ghostDecision>):
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: process.env.EIDOLON_MODEL ?? 'openai/gpt-4.1-mini',
+      model: process.env.EIDOLON_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free',
       messages: [
         {
           role: 'system',
