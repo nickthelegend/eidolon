@@ -13,6 +13,9 @@ import {
   type Context,
   type Hit,
   type TradeMemory,
+  forkUrl,
+  forkWrites,
+  forkStatus,
 } from '@eidolon/core';
 import { fromBase64, toBase64 } from '@mysten/sui/utils';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
@@ -77,7 +80,9 @@ type Round = {
   memoryBlobId?: string;
   createdAt: string;
 };
-const dbPath = 'data/rounds.json';
+// Fork runs keep their own round registry so fork digests never mix with mainnet rounds.
+const dataDir = forkUrl('EIDOLON') ? 'data-fork' : 'data';
+const dbPath = `${dataDir}/rounds.json`;
 let rounds: Round[] = [];
 try {
   rounds = JSON.parse(await readFile(dbPath, 'utf8'));
@@ -105,10 +110,17 @@ function broadcast(value: unknown) {
   for (const res of clients) res.write(`data: ${JSON.stringify(value)}\n\n`);
 }
 async function save() {
-  await mkdir('data', { recursive: true });
+  await mkdir(dataDir, { recursive: true });
   await writeFile(dbPath, JSON.stringify(rounds, null, 2));
   broadcast({ type: 'rounds', rounds });
 }
+// LOCAL FORK mode (EIDOLON_SUI_FORK_RPC): writes go only to the local sui-fork and only with
+// EIDOLON_ALLOW_FORK_WRITES=LOCAL_FORK_ONLY. The mainnet gate is refused while a fork RPC is set.
+const fork = forkUrl('EIDOLON');
+const mainnetLive = () => !fork && process.env.EIDOLON_ALLOW_MAINNET === 'I_ACKNOWLEDGE_REAL_USDC';
+const writesOn = () => mainnetLive() || forkWrites('EIDOLON');
+const modeLabel = () =>
+  fork ? (forkWrites('EIDOLON') ? 'LOCAL FORK writes enabled' : 'LOCAL FORK dry-run only') : mainnetLive() ? 'live writes enabled' : 'dry-run only';
 const missing = (name: string) => (process.env[name] ? null : `Setup required: ${name}`);
 function respond(res: ServerResponse, code: number, value: unknown) {
   res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
@@ -184,7 +196,8 @@ const server = createServer(async (req, res) => {
       return;
     }
     if (url.pathname === '/status') {
-      let rpc = process.env.TATUM_API_KEY ? 'Tatum' : 'dev RPC (not Tatum)';
+      const forkInfo = fork ? await forkStatus(chain().client) : null;
+      let rpc = forkInfo ? forkInfo.label : process.env.TATUM_API_KEY ? 'Tatum' : 'dev RPC (not Tatum)';
       let chainError = null;
       try {
         await chain().predict.read.executionMode();
@@ -213,7 +226,8 @@ const server = createServer(async (req, res) => {
           missing('EIDOLON_GHOST_KEY'),
           missing('OPENROUTER_API_KEY'),
         ].filter(Boolean),
-        mainnetWrites: process.env.EIDOLON_ALLOW_MAINNET === 'I_ACKNOWLEDGE_REAL_USDC',
+        mainnetWrites: mainnetLive(),
+        fork: forkInfo && { ...forkInfo, writes: forkWrites('EIDOLON') },
       });
       return;
     }
@@ -351,10 +365,7 @@ const server = createServer(async (req, res) => {
         dryRun: dry,
         transaction: dry.status === 'success' ? encoded : null,
         rpc: c.rpc,
-        mode:
-          process.env.EIDOLON_ALLOW_MAINNET === 'I_ACKNOWLEDGE_REAL_USDC'
-            ? 'live writes enabled'
-            : 'dry-run only',
+        mode: modeLabel(),
       });
       return;
     }
@@ -451,20 +462,16 @@ const server = createServer(async (req, res) => {
         },
         dryRun,
         transaction,
-        mode:
-          process.env.EIDOLON_ALLOW_MAINNET === 'I_ACKNOWLEDGE_REAL_USDC'
-            ? 'live writes enabled'
-            : 'dry-run only',
+        mode: modeLabel(),
         rpc: c.rpc,
       });
       return;
     }
     if (url.pathname === '/execute' && req.method === 'POST') {
-      if (process.env.EIDOLON_ALLOW_MAINNET !== 'I_ACKNOWLEDGE_REAL_USDC')
-        throw new Error('Dry-run only: mainnet writes disabled');
-      if (!process.env.TATUM_API_KEY)
+      if (!writesOn()) throw new Error('Dry-run only: mainnet writes disabled');
+      if (!fork && !process.env.TATUM_API_KEY)
         throw new Error('Setup required: TATUM_API_KEY for mainnet writes');
-      if (!process.env.MEMWAL_MAINNET_KEY || !process.env.MEMWAL_MAINNET_ACCOUNT_ID)
+      if (!fork && (!process.env.MEMWAL_MAINNET_KEY || !process.env.MEMWAL_MAINNET_ACCOUNT_ID))
         throw new Error('Setup required: Walrus Memory before live trading');
       if (!process.env.EIDOLON_GHOST_KEY)
         throw new Error('Setup required: EIDOLON_GHOST_KEY before live trading');
@@ -489,9 +496,8 @@ const server = createServer(async (req, res) => {
       return;
     }
     if (url.pathname === '/rounds' && req.method === 'POST') {
-      if (process.env.EIDOLON_ALLOW_MAINNET !== 'I_ACKNOWLEDGE_REAL_USDC')
-        throw new Error('Dry-run only: mainnet writes disabled');
-      if (!process.env.TATUM_API_KEY)
+      if (!writesOn()) throw new Error('Dry-run only: mainnet writes disabled');
+      if (!fork && !process.env.TATUM_API_KEY)
         throw new Error('Setup required: TATUM_API_KEY for mainnet writes');
       const input = await body(req);
       const p = executed.get(input.digest);
@@ -658,11 +664,11 @@ async function placeGhost(round: Round, hits: Hit[]) {
     /* narration is optional, policy is fixed */
   }
   await save();
-  if (process.env.EIDOLON_ALLOW_MAINNET !== 'I_ACKNOWLEDGE_REAL_USDC') {
+  if (!writesOn()) {
     round.ghost.status = 'dry-run only';
     return;
   }
-  if (!process.env.TATUM_API_KEY) {
+  if (!fork && !process.env.TATUM_API_KEY) {
     round.ghost.status = 'Setup required: TATUM_API_KEY';
     return;
   }

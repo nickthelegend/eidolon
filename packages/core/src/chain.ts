@@ -2,12 +2,27 @@ import { SuiGrpcClient } from '@mysten/sui/grpc';
 import { GrpcTransport } from '@protobuf-ts/grpc-transport';
 import { ChannelCredentials } from '@grpc/grpc-js';
 import { rateLimit } from './throttle.js';
+import { FORK_SOURCE, forkClient, forkUrl } from './fork.js';
 // One limiter for the whole process: every Tatum client shares Tatum's free-plan budget of 3 requests a second.
 const tatumLimit = rateLimit(400);
 import { getConfig, PredictClient, snapStrike, type MarketDescriptor } from '@mysten/deepbook-v3/predict';
 
 export const USDC = '0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC';
 export function chain(env = process.env) {
+  const fork = forkUrl('EIDOLON', env);
+  if (fork) {
+    // Local sui-fork of mainnet: reads, events and writes all go to the fork, labelled so it never passes as mainnet.
+    const client = forkClient(fork);
+    return {
+      client,
+      events: client,
+      eventsSource: 'same as reads' as const,
+      predict: new PredictClient({ network: 'mainnet', client }),
+      rpc: FORK_SOURCE,
+      rpcUrl: fork,
+      config: getConfig('mainnet'),
+    };
+  }
   const tatum = Boolean(env.TATUM_API_KEY);
   const rpcUrl = tatum
     ? 'https://sui-mainnet-grpc.gateway.tatum.io'
