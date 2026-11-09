@@ -319,7 +319,6 @@ export function App() {
       <main className="layout" id="trade">
         <div className="main-col">
           <section className="intro" aria-labelledby="headline">
-            <img className="intro-art" src="/art/v2/eidolon2-hero.webp" alt="" width={1536} height={1024} aria-hidden />
             <h1 id="headline">
               {move ? (
                 <>
