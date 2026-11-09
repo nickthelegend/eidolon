@@ -1,18 +1,19 @@
 # Testing evidence
 
-Run on 2026-11-08 against Sui mainnet. No mainnet transaction was submitted.
+Run on 2026-11-09 against Sui mainnet with the public development gRPC endpoint. No mainnet transaction was submitted.
 
-| Check | Result |
+| Check | Measured result |
 | --- | --- |
-| `pnpm install` | Passed, 5 workspace projects |
-| `pnpm build` | Passed, 4 packages |
-| `pnpm test` | 3 pure policy tests passed |
-| `pnpm test:live` | 4 active BTC markets, delayed execution, pool 9,156.24 USDC at the sample read |
-| Visitor `planMint` | Real quote, 4.64 USDC potential payout for a 2 USDC budget, 0.02 USDC order fee; correctly refused for unfunded account |
-| Enqueue simulation | Real funded account found from 50 recent onchain enqueue events; SDK plan accepted and gRPC simulation succeeded with 3 simulated events; no transaction submitted |
-| Exact-strike mirror probe | At a sampled $1 strike, UP probability 0.5003 was outside the live 0.15–0.5 entry band while DOWN could be quoted |
-| `pnpm dev` | Server `GET /status` and `/markets` responded; Vite returned HTTP 200 |
+| `pnpm build` | Passed: core, server, web, CLI |
+| `pnpm test` | Passed: 10 tests, including three real mainnet reconstruction fixtures |
+| `pnpm test:live` | Passed: 4 active BTC markets, delayed execution, pool 9,166.97 USDC at the sample read |
+| Live visitor quote | 4.57 USDC payout quoted for a 2 USDC budget; 0.02 USDC order fee; unfunded visitor refused for fee |
+| Live enqueue simulation | Funded address `0x4ed0d81b8d98763f781416ccfc5598cab8f50652dac5f155d4ecfa85a9dfe528`; accepted 2 USDC quote; simulation succeeded with 3 events |
+| Live history test | 4 settled trades for `0x7c9250467b7d7cc0aa2a9e76d06e9e8af313afa22285f1a3c314d749617b486e`, each with enqueue, fill, and payout digests |
+| `GET /history/:address?limit=5` on port 8791 | 4 settled trades and a profile for that address |
+| `GET /history/:address?marketId=...&side=up` through Vite proxy on port 5181 | 1 settled trade and a deterministic DOWN ghost decision for the second demo address |
+| `POST /plan` through Vite proxy using the second viewed address | Accepted quote and successful mainnet simulation via **dev RPC (not Tatum)** |
+| `POST /history/:address/remember` without memory keys | Refused with `Setup required: MEMWAL_MAINNET_KEY` |
+| Vite `/?as=<demo address>` | HTTP 200 on port 5181; the URL, owner selection, read-only banner, and hidden signing controls are implemented in the app. Browser inspection was unavailable in this environment. |
 
-The public Sui fullnode has disabled JSON-RPC. The development test therefore uses the Sui gRPC client and marks its source **dev RPC (not Tatum)**. With a Tatum key, production uses `SuiJsonRpcClient` and `sui_dryRunTransactionBlock` for dry-runs. That path remains unverified in this checkout. The live test can fail at a market rollover or if no recent account remains funded; it reports that failure instead of claiming a simulated success.
-
-Unverified: wallet signature round trip, Tatum event pagination, ghost mint, Walrus recall and write, OpenRouter narration, settlement payout proof, and multi-player persistence. These need the credentials and wallets in [BLOCKED.md](BLOCKED.md).
+The public development endpoint marks chain reads **dev RPC (not Tatum)**. Its event history has a finite checkpoint window, so older trades can require an archival RPC. Tatum JSON-RPC, Walrus writes, wallet signing, and real Predict orders remain unverified because credentials and funded signing wallets were not supplied. The existing live test can fail during a market rollover or if no recent account stays funded; it reports the failure instead of claiming a simulated success.
