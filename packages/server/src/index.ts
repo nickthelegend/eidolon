@@ -127,8 +127,9 @@ const demoSigner = createDemoSigner(
   [{ label: 'Eidolon player', variable: 'DEMO_PLAYER_KEY' }],
   { get: (bytes) => { const p = prepared.get(bytes); return p && { address: p.player, at: p.createdAt }; } },
   preparedFunding,
-  () => writesOn() && !fork,
-  fork ? { DEMO_SIGNER: undefined } : process.env,
+  () => writesOn(),
+  // On the fork the demo signer may only use the fork-only player key from .env.fork, never the mainnet .env.
+  fork ? { DEMO_SIGNER: process.env.DEMO_SIGNER, DEMO_PLAYER_KEY: process.env.EIDOLON_PLAYER_KEY } : process.env,
 );
 const modeLabel = () =>
   fork ? (forkWrites('EIDOLON') ? 'LOCAL FORK writes enabled' : 'LOCAL FORK dry-run only') : mainnetLive() ? 'live writes enabled' : 'dry-run only';
