@@ -153,7 +153,7 @@ export function App() {
 
   return (
     <div className="shell">
-      {demoConnected && <div className="demo-signer-badge">Demo signer · server-held demo key · real mainnet funds</div>}
+      {demoConnected && <div className="demo-signer-badge">Demo signer · server-held demo key · {String(status?.rpc ?? '').includes('LOCAL FORK') ? 'LOCAL FORK of Sui mainnet · no real funds' : 'real mainnet funds'}</div>}
       <header className="top">
         <a className="brand" href="/" aria-label="Eidolon home">
           <img className="brand-mark" src="/art/eidolon-mark.webp" alt="" width={32} height={32} />
