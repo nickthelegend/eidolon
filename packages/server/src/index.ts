@@ -93,6 +93,12 @@ try {
 }
 const clients = new Set<ServerResponse>();
 const priceSamples: { at: number; forward: number }[] = [];
+// Keep 30 minutes of the Predict BTC forward, as the server saw it, for the live chart.
+function samplePrice(forward: number) {
+  priceSamples.push({ at: Date.now(), forward });
+  while (priceSamples.length && priceSamples[0].at < Date.now() - 1_800_000) priceSamples.shift();
+}
+setInterval(() => { void marketsCached().catch(() => {}); }, 4_000).unref();
 const prepared = new Map<
   string,
   {
@@ -142,7 +148,11 @@ function marketsCached(): ReturnType<typeof markets> {
     const next = markets();
     marketsRefresh = next;
     next
-      .then(() => { marketsState = { at: Date.now(), value: next }; })
+      .then((r) => {
+        marketsState = { at: Date.now(), value: next };
+        const forward = r.markets.find((x) => x.forward)?.forward;
+        if (forward != null) samplePrice(forward);
+      })
       .catch(() => {})
       .finally(() => { marketsRefresh = null; });
   }
@@ -201,11 +211,6 @@ async function body(req: AsyncIterable<Uint8Array>) {
 }
 async function marketList() {
   const list = (await marketsCached()).markets;
-  const forward = list.find((x) => x.forward)?.forward;
-  if (forward != null) {
-    priceSamples.push({ at: Date.now(), forward });
-    while (priceSamples.length && priceSamples[0].at < Date.now() - 360_000) priceSamples.shift();
-  }
   return list;
 }
 function safeError(e: unknown) {
@@ -289,13 +294,12 @@ const server = createServer(async (req, res) => {
       });
       return;
     }
+    if (url.pathname === '/prices') {
+      respond(res, 200, { source: 'DeepBook Predict BTC forward, sampled by this server', samples: priceSamples });
+      return;
+    }
     if (url.pathname === '/markets') {
       const result = await marketsCached();
-      const forward = result.markets.find((x) => x.forward)?.forward;
-      if (forward != null) {
-        priceSamples.push({ at: Date.now(), forward });
-        while (priceSamples.length && priceSamples[0].at < Date.now() - 360_000) priceSamples.shift();
-      }
       respond(res, 200, result);
       return;
     }
