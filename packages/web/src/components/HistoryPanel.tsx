@@ -17,8 +17,9 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const missingMemory = setup.find((s) => s.includes('MEMWAL_'));
-  const rememberDisabled = !owner || readOnly || !live || Boolean(missingMemory) || !history?.trades.length || busy;
-  const rememberLabel = missingMemory ?? (readOnly ? 'Read-only view' : !live ? 'Dry-run only' : 'Teach my ghost (write to Walrus)');
+  // Writing settled trades to Walrus moves no funds, so it works in dry-run and read-only views too.
+  const rememberDisabled = !owner || Boolean(missingMemory) || !history?.trades.length || busy;
+  const rememberLabel = missingMemory ?? (readOnly ? 'Remember this trader on Walrus' : 'Teach my ghost (write to Walrus)');
 
   async function load() {
     if (!owner) return;
