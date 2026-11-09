@@ -36,7 +36,9 @@ export function GhostView({
   const called = feed?.trades.filter((t) => t.won != null) ?? [];
   const calledWins = called.filter((t) => t.won).length;
   const last = feed?.trades[0];
-  const mood = historyBusy ? 'thinking' : p && history?.trades.length ? 'smug' : 'idle';
+  // One stable face: the ghost only changes when it has really lost a settled round to you.
+  const lostLast = rounds.filter((r) => r.status === 'settled').at(-1);
+  const mood = lostLast && (lostLast.ghost?.leg?.pnl ?? 0) < (lostLast.playerLeg?.pnl ?? 0) ? 'cracked' : 'smug';
 
   async function toggle() {
     setBusy(true);

@@ -50,7 +50,7 @@ export function Memories({
 
   return (
     <section className="memories">
-      <img className="mem-ghost" src="/art/v2/eidolon2-ghost-thinking.webp" alt="" aria-hidden width={300} height={300} />
+      <img className="mem-ghost" src="/art/v2/eidolon2-ghost-smug.webp" alt="" aria-hidden width={300} height={300} />
       <header className="page-head">
         <h1>The ghost remembers</h1>
         <p>Every trade you make becomes a memory it learns from. Stored on Walrus.</p>
@@ -162,7 +162,7 @@ function Detail({ t, blob, lesson }: { t: HistoricalTrade; blob?: string; lesson
         </div>
       </dl>
       <p className="lesson">
-        <img src="/art/v2/eidolon2-ghost-thinking.webp" alt="" width={36} height={36} />
+        <img src="/art/v2/eidolon2-ghost-smug.webp" alt="" width={36} height={36} />
         <span>
           <small>The ghost learned</small>
           {lesson}
