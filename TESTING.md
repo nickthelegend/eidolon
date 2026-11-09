@@ -16,7 +16,21 @@ Run on 2026-11-09 against Sui mainnet with the public development gRPC endpoint.
 | `POST /history/:address/remember` without memory keys | Refused with `Setup required: MEMWAL_MAINNET_KEY` |
 | Vite `/?as=<demo address>` | HTTP 200 on port 5181; the URL, owner selection, read-only banner, and hidden signing controls are implemented in the app. Browser inspection was unavailable in this environment. |
 
-The public development endpoint marks chain reads **dev RPC (not Tatum)**. Its event history has a finite checkpoint window, so older trades can require an archival RPC. Tatum JSON-RPC, Walrus writes, wallet signing, and real Predict orders remain unverified because credentials and funded signing wallets were not supplied. The existing live test can fail during a market rollover or if no recent account stays funded; it reports the failure instead of claiming a simulated success.
+The public development endpoint marks chain reads **dev RPC (not Tatum)**. Its event history has a finite checkpoint window, so older trades can require an archival RPC. Sui JSON-RPC is deprecated; the app now uses Tatum's native gRPC gateway when `TATUM_API_KEY` is set. Walrus writes, wallet signing, and real Predict orders remain unverified because funded signing wallets were not supplied. The existing live test can fail during a market rollover or if no recent account stays funded; it reports the failure instead of claiming a simulated success.
+
+## Tatum gRPC smoke check (Nov 9 2026)
+
+Started the built server from the repo root with its `.env`, on port 8792, with `EIDOLON_ALLOW_MAINNET` overridden to empty. Stopped it by PID after the checks. No transaction was submitted.
+
+| Check | Result |
+| --- | --- |
+| `GET /status` | HTTP 200, `rpc: "Tatum"`, `chainError: null` |
+| Direct SDK market list and execution mode | Passed: 4 active markets and execution mode read |
+| `core.getTransaction` for a known mainnet fill | Passed: `Transaction`, 3 events, parsed sender present |
+| `GET /markets`, direct pool read, pricer, and quote | Failed: Tatum returned HTTP 429 from `TransactionExecutionService/SimulateTransaction` |
+| `core.listEvents` for `OrderEnqueued` | Failed: `gRPC method not allowed: sui.rpc.v2.LedgerService/ListEvents` |
+
+The gateway responses block a Tatum quote or dry-run and the event-backed settlement watcher. The application reports these failures; it does not substitute JSON-RPC or report a successful quote. Tatum gateway access to `SimulateTransaction` and `ListEvents` must be resolved before this path can be considered live ready.
 
 ## Round-2 judging pass (Nov 9 2026)
 - `pnpm test`: 10/10 passed; `pnpm -r build` passed.

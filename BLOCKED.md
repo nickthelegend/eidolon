@@ -1,7 +1,7 @@
 # Required from Nick for the first real round
 
 - Walrus Memory mainnet account ID and delegate key: `MEMWAL_MAINNET_ACCOUNT_ID`, `MEMWAL_MAINNET_KEY`.
-- Tatum key with Sui mainnet JSON-RPC access: `TATUM_API_KEY`.
+- Tatum key with Sui mainnet gRPC gateway access to `SimulateTransaction` and `ListEvents`: `TATUM_API_KEY` (the current smoke check received HTTP 429 and “method not allowed,” respectively).
 - Dedicated ghost Ed25519 `suiprivkey` in `EIDOLON_GHOST_KEY`, with about 20 USDC deposited into its Predict account and about 1 SUI for gas.
 - Player Sui wallet with USDC and SUI. Use the UI's funding step to create and fund its Predict account.
 - Explicit live-write flag `EIDOLON_ALLOW_MAINNET=I_ACKNOWLEDGE_REAL_USDC` when ready to spend real USDC.

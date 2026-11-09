@@ -14,7 +14,7 @@ pnpm test:live
 pnpm dev
 ```
 
-Open http://localhost:5173. The server runs at http://localhost:8787. Without `.env`, it reads Sui mainnet through the public gRPC fullnode and labels every response **dev RPC (not Tatum)**. The production path uses the Tatum JSON-RPC endpoint when `TATUM_API_KEY` is set. Sui disabled JSON-RPC on its public fullnode, so `https://fullnode.mainnet.sui.io` cannot be used as a JSON-RPC development endpoint. `EIDOLON_DEV_SUI_RPC` accepts a Sui mainnet gRPC URL and defaults to `https://fullnode.mainnet.sui.io:443`.
+Open http://localhost:5173. The server runs at http://localhost:8787. Without `.env`, it reads Sui mainnet through the public gRPC fullnode and labels every response **dev RPC (not Tatum)**. With `TATUM_API_KEY`, it uses Tatum's native Sui gRPC gateway (`sui-mainnet-grpc.gateway.tatum.io:443`). Sui JSON-RPC is deprecated, and Tatum's former JSON-RPC endpoint returns 404. `EIDOLON_DEV_SUI_RPC` accepts a Sui mainnet gRPC-web URL and defaults to `https://fullnode.mainnet.sui.io:443`.
 
 Set `EIDOLON_PORT` and `EIDOLON_WEB_PORT` to move the server and Vite ports together; Vite proxies `/api` to `EIDOLON_PORT`.
 
@@ -42,7 +42,7 @@ The CLI provides `pnpm --filter @eidolon/cli exec eidolon status`, `markets`, an
 
 ## Current live status
 
-Mainnet gRPC reads and a real enqueue simulation pass with the public development endpoint. Tatum, Walrus, wallet signing, a real mint, ghost execution, and payout event reconciliation have not been exercised here because their credentials and funded wallets were not supplied. See [TESTING.md](TESTING.md) and [BLOCKED.md](BLOCKED.md).
+Mainnet gRPC reads and a real enqueue simulation pass with the public development endpoint. The Tatum gRPC smoke check is recorded in [TESTING.md](TESTING.md). Walrus, wallet signing, a real mint, ghost execution, and payout event reconciliation have not been exercised here.
 
 Protocol and SDK references: [DeepBook Predict](https://www.docs.sui.io/onchain-finance/deepbook/deepbook-predict), [Positions SDK](https://www.docs.sui.io/onchain-finance/deepbook/deepbook-predict-sdk/positions), [Sui RPC migration](https://docs.sui.io/references/sui-api), and [dApp Kit React](https://sdk.mystenlabs.com/dapp-kit/getting-started/react).
 
