@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ago, hm, pct, post, short, suiscan, usd, usdc, walruscan, type GhostFeed, type GhostTrade, type HistoryResponse, type Round, type Status } from '../api';
+import { ago, hm, learn, pct, post, short, suiscan, usd, usdc, walruscan, type GhostFeed, type GhostTrade, type HistoryResponse, type Round, type Status } from '../api';
 
 /** The ghost on its own: who it thinks you are, and every trade it makes by itself, step by step. */
 export function GhostView({
@@ -26,6 +26,7 @@ export function GhostView({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [open, setOpen] = useState<string | null>(null);
+  const [all, setAll] = useState(false);
   const p = history?.profile;
   const dominantUp = (p?.upBias ?? 0.5) >= 0.5;
   const lean = p ? (dominantUp ? p.upBias : 1 - p.upBias) : 0;
@@ -95,7 +96,7 @@ export function GhostView({
             </div>
           ) : (
             <ol className="feed-rows">
-              {feed.trades.map((t, i) => (
+              {(all ? feed.trades : feed.trades.slice(0, 8)).map((t, i) => (
                 <li key={t.id} className={`${i === 0 ? 'newest' : ''} ${open === t.id ? 'open' : ''}`}>
                   <button className="feed-row" aria-expanded={open === t.id} onClick={() => setOpen(open === t.id ? null : t.id)}>
                     <span className="num muted">{hm(t.createdAt)}</span>
@@ -108,6 +109,11 @@ export function GhostView({
                 </li>
               ))}
             </ol>
+          )}
+          {feed && feed.trades.length > 8 && (
+            <button className="link-btn feed-more" onClick={() => setAll((x) => !x)}>
+              {all ? 'Show the latest 8' : `Show all ${feed.trades.length} rounds`}
+            </button>
           )}
         </section>
 
@@ -130,6 +136,7 @@ export function GhostView({
               <p className="fine">{historyBusy ? 'Reading…' : status?.setup.some((s) => s.includes('MEMWAL')) ? 'Setup required: Walrus Memory' : 'No settled trades to read yet.'}</p>
             )}
           </section>
+          {history && history.trades.length > 1 && <Learned history={history} />}
           <section className="card glass" aria-labelledby="pnl-title">
             <h2 id="pnl-title">You vs your ghost</h2>
             {settledMine.length ? (
@@ -220,5 +227,51 @@ function Bar({ label, value, text }: { label: string; value: number; text: strin
       </span>
       <b className="num">{text}</b>
     </div>
+  );
+}
+
+/** What the ghost learned: sizing after wins and losses, the current streak, extremes, and your P&L curve. All from settled trades. */
+function Learned({ history }: { history: HistoryResponse }) {
+  const l = learn(history.trades);
+  const lines: string[] = [];
+  if (l.afterLoss != null && l.size != null)
+    lines.push(
+      l.afterLoss > l.size * 1.1
+        ? `After a loss you size up: ${l.afterLoss.toFixed(2)} USDC against your ${l.size.toFixed(2)} average.`
+        : l.afterLoss < l.size * 0.9
+          ? `After a loss you shrink: ${l.afterLoss.toFixed(2)} USDC against your ${l.size.toFixed(2)} average.`
+          : `A loss doesn’t change your size: ${l.afterLoss.toFixed(2)} USDC, about your average.`,
+    );
+  if (l.afterWin != null && l.size != null && Math.abs(l.afterWin - l.size) > l.size * 0.1)
+    lines.push(`After a win you bet ${l.afterWin > l.size ? 'bigger' : 'smaller'}: ${l.afterWin.toFixed(2)} USDC.`);
+  if (l.streak) lines.push(`You are on a ${Math.abs(l.streak)}-trade ${l.streak > 0 ? 'winning' : 'losing'} streak.`);
+  if (l.worst && l.worst.pnl < 0) lines.push(`Your worst trade: ${l.worst.side === 'up' ? 'Higher' : 'Lower'} at $${l.worst.strike.toLocaleString('en-US')}, ${usdc(l.worst.pnl)} USDC.`);
+  if (l.best && l.best.pnl > 0) lines.push(`Your best: ${l.best.side === 'up' ? 'Higher' : 'Lower'} at $${l.best.strike.toLocaleString('en-US')}, ${usdc(l.best.pnl)} USDC.`);
+  const min = Math.min(0, ...l.curve);
+  const max = Math.max(0, ...l.curve);
+  const w = 260;
+  const h = 64;
+  const x = (i: number) => (l.curve.length < 2 ? 0 : (i / (l.curve.length - 1)) * w);
+  const y = (v: number) => h - ((v - min) / (max - min || 1)) * h;
+  const d = l.curve.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const last = l.curve.at(-1) ?? 0;
+  return (
+    <section className="card glass learned" aria-labelledby="learned-title">
+      <h2 id="learned-title">What it learned about you</h2>
+      <ul>
+        {lines.map((t) => (
+          <li key={t}>{t}</li>
+        ))}
+      </ul>
+      <figure className="curve" aria-label={`Your P&L over ${l.count} settled trades: ${usdc(last)} USDC`}>
+        <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" aria-hidden>
+          <line x1={0} x2={w} y1={y(0)} y2={y(0)} className="zero" />
+          <path d={d} className={last >= 0 ? 'up' : 'down'} />
+        </svg>
+        <figcaption>
+          Your P&amp;L over {l.count} settled trades <b className={`num ${last >= 0 ? 'up' : 'down'}`}>{usdc(last)} USDC</b>
+        </figcaption>
+      </figure>
+    </section>
   );
 }

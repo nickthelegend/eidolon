@@ -143,6 +143,24 @@ export function Arena({
         <LiveChart samples={samples} now={now} expiryMs={market?.expiryMs ?? null} side={side} strike={preview?.strike ?? null} suggested={suggested ?? null} ghost={preview?.ghostPreview ?? null} />
       </div>
 
+      {feed && feed.trades.some((t) => t.won != null) && (
+        <button className="calls-strip" onClick={onGhost} aria-label="The ghost's recent calls; open the ghost">
+          <span className="cs-label">Ghost’s last calls</span>
+          <span className="cs-dots">
+            {feed.trades
+              .filter((t) => t.won != null)
+              .slice(0, 12)
+              .reverse()
+              .map((t) => (
+                <i key={t.id} className={t.won ? 'won' : 'lost'} title={`${t.side === 'up' ? 'Higher' : 'Lower'} ${t.strike ? usd(t.strike) : ''}: ${t.status}`} />
+              ))}
+          </span>
+          <span className="cs-sum num">
+            {feed.trades.filter((t) => t.won).length} of {feed.trades.filter((t) => t.won != null).length} {feed.mode === 'live' ? 'won' : 'would have won'}
+          </span>
+        </button>
+      )}
+
       <div className="arena-bottom">
         <button className="bubble" onClick={onGhost} aria-label="Open your ghost">
           <img src="/art/v2/eidolon2-ghost-smug.webp" alt="" width={64} height={64} />

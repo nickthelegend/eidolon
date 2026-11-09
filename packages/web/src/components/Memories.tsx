@@ -124,7 +124,7 @@ export function Memories({
                 </li>
               ))}
             </ol>
-            {selected && <Detail t={selected} blob={byFill[selected.fillDigest]} />}
+            {selected && <Detail t={selected} blob={byFill[selected.fillDigest]} lesson={lesson(selected, trades)} />}
           </div>
         </>
       )}
@@ -132,7 +132,7 @@ export function Memories({
   );
 }
 
-function Detail({ t, blob }: { t: HistoricalTrade; blob?: string }) {
+function Detail({ t, blob, lesson }: { t: HistoricalTrade; blob?: string; lesson: string }) {
   return (
     <aside className="card glass mem-detail" aria-label="Selected memory">
       <header>
@@ -161,6 +161,13 @@ function Detail({ t, blob }: { t: HistoricalTrade; blob?: string }) {
           <dd className="num">{blob ? `blob ${short(blob)}` : 'chain only'}</dd>
         </div>
       </dl>
+      <p className="lesson">
+        <img src="/art/v2/eidolon2-ghost-thinking.webp" alt="" width={36} height={36} />
+        <span>
+          <small>The ghost learned</small>
+          {lesson}
+        </span>
+      </p>
       <div className="mem-actions">
         {blob && (
           <a className="ghost-btn" href={walruscan(blob)} target="_blank" rel="noreferrer">
@@ -176,4 +183,14 @@ function Detail({ t, blob }: { t: HistoricalTrade; blob?: string }) {
       </div>
     </aside>
   );
+}
+
+/** One plain sentence on what this trade taught the ghost, using only this trade and the rest of the history. */
+function lesson(t: HistoricalTrade, all: HistoricalTrade[]) {
+  const sameSide = all.filter((x) => x.side === t.side);
+  const hits = sameSide.filter((x) => x.pnl > 0).length;
+  const avg = all.reduce((n, x) => n + x.size, 0) / all.length;
+  const side = t.side === 'up' ? 'Higher' : 'Lower';
+  const sizeNote = t.size > avg * 1.25 ? ` at ${t.size.toFixed(2)} USDC, well above your ${avg.toFixed(2)} average` : '';
+  return `${t.pnl > 0 ? 'A win' : 'A loss'} on ${side}${sizeNote}. You call ${side} in ${sameSide.length} of ${all.length} trades and it pays ${hits} of ${sameSide.length} times, so the ghost leans ${t.side === 'up' ? 'Lower' : 'Higher'} against you.`;
 }

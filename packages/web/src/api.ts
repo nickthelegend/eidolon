@@ -215,3 +215,23 @@ export const ago = (iso: string, now: number) => {
   return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.floor(s / 60)}m ago` : `${Math.floor(s / 3600)}h ago`;
 };
 export const hm = (t: number | string) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+/** Plain facts the ghost reads from settled trades (oldest first): how you size after wins and losses, your streak, your extremes. */
+export function learn(tradesNewestFirst: HistoricalTrade[]) {
+  const t = [...tradesNewestFirst].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const avg = (xs: number[]) => (xs.length ? xs.reduce((n, x) => n + x, 0) / xs.length : null);
+  const afterLoss = avg(t.slice(1).filter((_, i) => t[i].pnl < 0).map((x) => x.size));
+  const afterWin = avg(t.slice(1).filter((_, i) => t[i].pnl > 0).map((x) => x.size));
+  const size = avg(t.map((x) => x.size));
+  let streak = 0;
+  for (const x of [...t].reverse()) {
+    if (streak === 0) streak = x.pnl > 0 ? 1 : -1;
+    else if ((x.pnl > 0) === streak > 0) streak += streak > 0 ? 1 : -1;
+    else break;
+  }
+  const best = t.reduce<HistoricalTrade | null>((b, x) => (!b || x.pnl > b.pnl ? x : b), null);
+  const worst = t.reduce<HistoricalTrade | null>((b, x) => (!b || x.pnl < b.pnl ? x : b), null);
+  let run = 0;
+  const curve = t.map((x) => (run += x.pnl));
+  return { size, afterLoss, afterWin, streak, best, worst, curve, count: t.length };
+}
