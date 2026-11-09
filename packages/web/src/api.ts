@@ -19,6 +19,8 @@ export type Status = {
   ghostBalance: number | null;
   setup: string[];
   mainnetWrites: boolean;
+  /** Set only in LOCAL FORK mode: the fork checkpoint label and whether fork writes are enabled. */
+  fork?: { label?: string; writes?: boolean } | null;
 };
 
 export type GhostPreview = {

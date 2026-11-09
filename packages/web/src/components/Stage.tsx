@@ -13,6 +13,7 @@ export function Stage({
   refusal,
   busy,
   canTrade,
+  fork = false,
   onTrade,
   history,
 }: {
@@ -26,6 +27,7 @@ export function Stage({
   refusal: string | null;
   busy: string | null;
   canTrade: boolean;
+  fork?: boolean;
   onTrade: () => void;
   history: HistoryResponse | null;
 }) {
@@ -130,7 +132,7 @@ export function Stage({
             {dryOk &&
               (canTrade ? (
                 <button className="primary ember" disabled={busy !== null} onClick={onTrade}>
-                  {busy === 'trade' ? 'Signing…' : 'Sign and queue the real order'}
+                  {busy === 'trade' ? 'Signing…' : fork ? 'Sign and queue the order (local fork)' : 'Sign and queue the real order'}
                 </button>
               ) : (
                 <p className="fine">Real orders are off on this server (dry-run only).</p>

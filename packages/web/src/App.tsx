@@ -141,13 +141,15 @@ export function App() {
 
   const trade = () =>
     run('trade', async () => {
-      if (!preview?.transaction || !status?.mainnetWrites) return;
+      if (!preview?.transaction || !(status?.mainnetWrites || status?.fork?.writes)) return;
       const done = await signAndSend(preview.transaction);
       await post('/rounds', { digest: done.digest });
       setPreview(null);
     });
 
-  const live = status?.mainnetWrites ?? false;
+  // On the LOCAL FORK, fork writes count as writes; every label says fork, never real funds.
+  const forkMode = Boolean(status?.fork);
+  const live = Boolean(status?.mainnetWrites || (forkMode && status?.fork?.writes));
   const visibleMarkets = markets.filter((m) => m.expiryMs > now || m.id === marketId);
   const reset = () => setPreview(null);
 
@@ -169,7 +171,7 @@ export function App() {
         <div className="top-right">
           <span className={`mode ${live ? 'mode-live' : ''}`}>
             <i aria-hidden />
-            {live ? 'Real USDC' : 'Dry-run only'}
+            {live ? (forkMode ? 'Local fork writes' : 'Real USDC') : 'Dry-run only'}
           </span>
           <ConnectButton />
         </div>
@@ -388,7 +390,7 @@ export function App() {
             <p className="fine">Minimum 2 USDC. Predict takes a 0.02 USDC fee and rounds to whole lots.</p>
           </div>
 
-          <Funding live={live && !readOnly && Boolean(account)} owner={owner} signAndSend={signAndSend} />
+          <Funding live={live && !readOnly && Boolean(account)} fork={forkMode} owner={owner} signAndSend={signAndSend} />
         </aside>
 
         <Stage
@@ -402,6 +404,7 @@ export function App() {
           refusal={error && errorAt === 'plan' ? error : null}
           busy={busy}
           canTrade={live && !readOnly && Boolean(account)}
+          fork={forkMode}
           onTrade={trade}
           history={history}
         />
@@ -522,10 +525,12 @@ function Stat({ label, value, unit, tone, warn, lead }: { label: string; value: 
 
 function Funding({
   live,
+  fork,
   owner,
   signAndSend,
 }: {
   live: boolean;
+  fork: boolean;
   owner: string | undefined;
   signAndSend: (tx: string) => Promise<unknown>;
 }) {
@@ -590,7 +595,7 @@ function Funding({
       )}
       {plan?.transaction && live && (
         <button className="primary ember" onClick={() => signAndSend(plan.transaction!).then(() => setPlan(null))}>
-          Sign and deposit real USDC
+          {fork ? 'Sign and deposit (local fork, no real funds)' : 'Sign and deposit real USDC'}
         </button>
       )}
       {msg && <p className="alert">{msg}</p>}
