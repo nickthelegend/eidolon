@@ -1,4 +1,4 @@
-import { chain, markets } from '../src/index.js';
+import { chain, markets, predictHistory } from '../src/index.js';
 import { strict as assert } from 'node:assert';
 
 const c = chain();
@@ -58,3 +58,9 @@ for (const candidate of [...new Set(events.events.map((event) => event.sender))]
   }
 }
 assert.ok(dryRun, 'no recent funded account produced a successful real enqueue dry-run');
+
+const demo = '0x7c9250467b7d7cc0aa2a9e76d06e9e8af313afa22285f1a3c314d749617b486e';
+const history = await predictHistory(demo, { limit: 5 });
+assert.ok(history.length >= 1, 'demo address has at least one settled Predict trade');
+assert.ok(history.every((t) => [t.enqueueDigest, t.fillDigest, t.payoutDigest].every((digest) => /^[1-9A-HJ-NP-Za-km-z]{32,64}$/.test(digest))), 'history has valid Sui digests');
+console.log(`LIVE HISTORY ${history.length} settled trades for ${demo}`);
