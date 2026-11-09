@@ -25,10 +25,19 @@ export function memoryFor(player: string, env = process.env) {
         }
       }
     },
+    // Many memories in one relayer bulk job: one signed request, certified in parallel.
+    async rememberMany(memories: Memory[]): Promise<{ blobIds: string[]; failed: { index: number; error: string }[] }> {
+      const result = await client.rememberBulkAndWait(memories.map((m) => ({ text: encodeMemory(m) })), { timeoutMs: 900_000 });
+      return {
+        blobIds: result.results.filter((r) => r.status === 'done').map((r) => r.blob_id),
+        failed: result.results.flatMap((r, index) => (r.status === 'done' ? [] : [{ index, error: r.error ?? r.status }])),
+      };
+    },
     async remember(memory: Memory): Promise<string> {
       for (let attempt = 0; ; attempt++) {
         try {
-          return (await client.rememberAndWait(encodeMemory(memory))).blob_id;
+          // Walrus mainnet often takes 1-2 minutes to certify a blob; the SDK's 60 s default gave up on writes that then landed.
+          return (await client.rememberAndWait(encodeMemory(memory), { timeoutMs: 300_000 })).blob_id;
         } catch (error) {
           if (attempt >= 3 || !String(error).includes('429')) throw error;
           await new Promise((resolve) => setTimeout(resolve, 2000 * 2 ** attempt));

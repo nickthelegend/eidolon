@@ -106,7 +106,6 @@ const prepared = new Map<
   }
 >();
 const preparedFunding = new Map<string, { address: string; at: number }>();
-let lastHistoryRememberAt = 0;
 const executed = new Map<string, NonNullable<ReturnType<typeof prepared.get>>>();
 function broadcast(value: unknown) {
   for (const res of clients) res.write(`data: ${JSON.stringify(value)}\n\n`);
@@ -318,14 +317,8 @@ const server = createServer(async (req, res) => {
         if (!process.env.MEMWAL_MAINNET_ACCOUNT_ID) throw new Error('Setup required: MEMWAL_MAINNET_ACCOUNT_ID');
         // Storing public trade history on Walrus moves no funds, so it needs only the Walrus keys, not the USDC gate.
         const trades = await predictHistory(address, { limit: 200 });
-        const memory = memoryFor(address);
-        const blobIds: string[] = [];
-        for (const trade of trades) {
-          const wait = Math.max(0, 1500 - (Date.now() - lastHistoryRememberAt));
-          if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
-          lastHistoryRememberAt = Date.now();
-          blobIds.push(await memory.remember(trade));
-        }
+        const { blobIds, failed } = await memoryFor(address).rememberMany(trades);
+        if (failed.length) throw new Error(`Walrus stored ${blobIds.length} of ${trades.length} trade memories; ${failed.length} failed: ${failed[0].error}`);
         respond(res, 200, { blobIds });
         return;
       }
