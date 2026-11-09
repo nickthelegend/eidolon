@@ -27,6 +27,8 @@ function explainAbort(err: unknown): string | null {
   if (!e?.MoveAbort && text) {
     const m = text.match(/Identifier\("([a-z_]+)"\)[\s\S]*?\},\s*(\d+)\)/);
     if (m) e = { MoveAbort: { location: { module: m[1] }, abortCode: m[2] } };
+    const m2 = !m && text.match(/abort code: (\d+), in '0x[0-9a-fA-F]+::([a-z_]+)::/);
+    if (m2) e = { MoveAbort: { location: { module: m2[2] }, abortCode: m2[1] } };
   }
   const d = decodeMoveAbort(e);
   if (!d) return null;
@@ -535,7 +537,7 @@ const server = createServer(async (req, res) => {
     }
     respond(res, 404, { error: 'Not found' });
   } catch (error) {
-    respond(res, 400, { error: safeError(error) });
+    respond(res, 400, { error: explainAbort(error) ?? safeError(error) });
   }
 });
 
