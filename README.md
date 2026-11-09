@@ -11,7 +11,7 @@ Trade a live DeepBook Predict BTC market against a ghost built from your own Wal
 1. `pnpm install && pnpm build && pnpm dev`, then open http://localhost:5173. No keys are needed for this read-only path.
 2. Open `http://localhost:5173/?as=0x7c9250467b7d7cc0aa2a9e76d06e9e8af313afa22285f1a3c314d749617b486e`, a public mainnet Predict trader whose owner is unknown (more in [docs/DEMO-ADDRESSES.md](docs/DEMO-ADDRESSES.md)). The page is read-only: signing controls are hidden.
 3. **Your trading history** loads that address's settled Predict trades from mainnet. Each has its order, fill and payout digest.
-4. **Your ghost** shows the ghost built from that history: the share of UP bets and hit rate it read, the opposite side, its size and its counter-strike. Without Walrus Memory keys (the path in step 1) it is labelled **Not on Walrus yet**. That label means memory is not configured on this server. It does not mean the address has no memories.
+4. **Your ghost** shows the ghost built from that history: the share of UP bets and hit rate it read, the opposite side, its size and its counter-strike. Without Walrus Memory keys (the path in step 1) it is labelled **Not on Walrus yet**. With Walrus Memory configured, the ghost is built from that address's memories recalled from Walrus instead. For `0x96ed1d73…2ccd2` the panel says "I recalled 31 of your trades from Walrus Memory: 32% UP, 81% hit rate…" and links the recalled blobs on Walruscan. **Not on Walrus yet** now shows only when the address has no Walrus memories, or when recall fails (then it shows the error).
 5. Pick a live BTC market and a strike, then dry-run a bet. The quote, the 0.02 USDC fee and the expected payout come from Predict's on-chain pricer, and the simulation runs on mainnet without sending anything.
 6. To trade for real, set the keys in [BLOCKED.md](BLOCKED.md) and the steps in `MAINNET-RUNBOOK.md`. Without them the app says **Setup required** and never pretends.
 
@@ -34,7 +34,7 @@ Only real evidence is listed. Eidolon deploys no contract of its own; it trades 
 | `POST /history/:address/remember` without keys | Refused: `Setup required: MEMWAL_MAINNET_KEY` | n/a |
 | Walrus Memory blobs on mainnet | **31**, in namespace `eidolon-v1:0x96ed1d73…2ccd2`. Details in the Walrus table below | Walrus mainnet relayer |
 
-**Walrus Memory on mainnet**, Nov 9 2026. All 31 blob IDs are in [docs/walrus-mainnet-2026-11-09.json](docs/walrus-mainnet-2026-11-09.json). Walrus blob IDs have no Suiscan link, so they are listed as IDs.
+**Walrus Memory on mainnet**, Nov 9 2026. All 31 blob IDs are in [docs/walrus-mainnet-2026-11-09.json](docs/walrus-mainnet-2026-11-09.json). Walrus blob IDs have no Suiscan link. The app links them on Walruscan, and a stored blob can be read from the public mainnet aggregator (row below).
 
 | What | Result |
 | --- | --- |
@@ -47,6 +47,8 @@ Only real evidence is listed. Eidolon deploys no contract of its own; it trades 
 | First blob (the test write) | `PJQ_DMK9MAlBM82wpPLkVTehX5nM8ne63HARgsKnw9o` |
 | Last blob (last ID the import returned) | `uCjfjS6H3W8sm9oU3LWOCyDw06Oga6ltatrdt9r8UQ4` |
 | Recall | `GET /ghost/0x96ed1d73…2ccd2` returned 31 hits (31 unique blobs). Profile: 32% UP bets, 81% hit rate, average size 4.84 USDC |
+| Ghost panel in the web app | With Walrus configured, `GET /history/0x96ed1d73…2ccd2` recalled the address's memories and built the ghost from them. The panel showed "I recalled 31 of your trades from Walrus Memory: 32% UP, 81% hit rate…" with links to the recalled blobs on Walruscan (checked in a browser, `781d916`) |
+| Public aggregator read | `GET https://aggregator.walrus-mainnet.walrus.space/v1/blobs/PJQ_DMK9MAlBM82wpPLkVTehX5nM8ne63HARgsKnw9o` returned HTTP 200, 1101 bytes |
 | Chain reads | Through Tatum (`/status` returned `rpc: "Tatum"`) |
 
 Mainnet blobs took over 60 s to certify, so each write now waits up to 300 s (`afb613b`). History goes in through `rememberBulkAndWait` in chunks of 20 (`0a2316f`). History import moves no funds, so it no longer needs the USDC gate (`4bfe136`).
@@ -67,11 +69,11 @@ The fork has no Predict keeper and a frozen clock, so it shows no fill, no settl
 | --- | --- |
 | Live Predict markets, quotes, entry-band checks, mainnet dry-runs | **Live** (read-only) |
 | Settled-trade history for any address, with payout math checked | **Live** (read-only) |
-| History-built ghost (side, size, counter-strike), shown when Walrus Memory is not configured and labelled "Not on Walrus yet" | **Live** (read-only) |
+| History-built ghost (side, size, counter-strike), labelled "Not on Walrus yet" when the address has no Walrus memories or memory is not configured | **Live** (read-only) |
 | Reads through Tatum's Sui gRPC gateway | **Live** when `TATUM_API_KEY` is set. Event scans use the public fullnode because Tatum blocks `ListEvents` |
 | Wallet signing, `/execute`, round registration | Proven on a **local fork only**. No signed round on mainnet yet |
 | Walrus Memory writes and recall on mainnet | **Live**: 31 memories (the event requires at least 10), recalled through `GET /ghost/:address`. See [Proof](#proof) |
-| Ghost panel in the web app with Walrus configured | Shows the ghost of the player's latest registered round on this server, or **No memories of you yet** before the first one. It does not list memories imported from history yet; those are read through `GET /ghost/:address` |
+| Ghost built from Walrus recall in the web app | **Live**: with Walrus configured, the ghost's profile and decision come from the address's recalled memories, and the panel links the recalled blobs on Walruscan. Verified for `0x96ed1d73…2ccd2` (31 recalled) |
 | Ghost placed automatically against a player round | **PENDING**: needs hub funding for the ghost wallet `0x5b68d119…2d09` and a player fill on mainnet |
 | Funded player round on mainnet | **PENDING**: the demo signer `0x088c7e04…7544` is unfunded until hub funding |
 | Fill, settlement and payout reconciliation of an Eidolon round | **PENDING**: needs the first funded mainnet round |
@@ -114,7 +116,7 @@ Open `?as=0x...` with a full 64-digit Sui address, or enter an address in the Ar
 
 ## History import
 
-The **Your trading history** panel reads settled Predict trades for the connected or viewed address. `GET /history/:address` returns `{ trades, profile, decision }`; pass `marketId` and `side` query parameters for a deterministic decision based on the selected live market. The profile uses the same `habitProfile` function as the live ghost, and the preview uses the same `ghostDecision` policy. This preview is labelled **from on-chain history, not yet in Walrus memory**. When Walrus Memory is not configured, the **Your ghost** panel shows this history-built ghost too: its line states the trade count, UP share and hit rate it read, its side and size come from `ghostDecision`, and its strike is the counter-strike from the last quote. It is labelled **Not on Walrus yet** and never claims a memory. When Walrus Memory is configured, the panel shows the ghost of the player's latest registered round instead, or **No memories of you yet** before the first one. It does not list memories imported from history yet; `GET /ghost/:address` reads those back.
+The **Your trading history** panel reads settled Predict trades for the connected or viewed address. `GET /history/:address` returns `{ trades, profile, decision }`; pass `marketId` and `side` query parameters for a deterministic decision based on the selected live market. The profile uses the same `habitProfile` function as the live ghost, and the preview uses the same `ghostDecision` policy. This preview is labelled **from on-chain history, not yet in Walrus memory**. When Walrus Memory is not configured, the **Your ghost** panel shows this history-built ghost too: its line states the trade count, UP share and hit rate it read, its side and size come from `ghostDecision`, and its strike is the counter-strike from the last quote. It is labelled **Not on Walrus yet** and never claims a memory. When Walrus Memory is configured, `GET /history/:address` also recalls that address's memories from Walrus and builds the profile and the ghost's decision from them; the trade list stays the chain's. It returns the recalled blob IDs, and the panel says how many trades it recalled and links the blobs on Walruscan. **Not on Walrus yet** now shows only when the address has no Walrus memories, or when recall fails (then it shows the error). `GET /ghost/:address` returns the raw recall.
 
 The importer matches `OrderEnqueued`, `QueuedOrderFilled`, `OrderMinted`, and `OpenRecordSettled` to the owner's Predict account wrapper. It verifies payout math against the settled market, computes P&L from the fill debit and payout, and leaves minute moves unknown. Strike distance uses the forward snapshot at enqueue. Raw chain responses are cached briefly under ignored `data/history/`. It reads up to 200 enqueues per call; incomplete or refunded records do not become trades. Public gRPC history can end at its oldest available checkpoint.
 

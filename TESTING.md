@@ -48,5 +48,7 @@ All 31 blob IDs are in [docs/walrus-mainnet-2026-11-09.json](docs/walrus-mainnet
 | `POST /history/:address/remember` for `0x96ed1d73…2ccd2` | 30 settled trades stored, 15:38:21 to 15:40:38 UTC |
 | `GET /ghost/0x96ed1d73…2ccd2` | 31 hits (31 unique blobs). Profile: 32% UP bets, 81% hit rate, average size 4.84 USDC |
 | `GET /status` | `rpc: "Tatum"` |
+| Ghost panel in a browser for `0x96ed1d73…2ccd2`, after `781d916` | "I recalled 31 of your trades from Walrus Memory: 32% UP, 81% hit rate…", with Walruscan links to the recalled blobs |
+| Public aggregator `GET /v1/blobs/PJQ_DMK9MAlBM82wpPLkVTehX5nM8ne63HARgsKnw9o` | HTTP 200, 1101 bytes |
 
 Mainnet blobs took over 60 s to certify, so writes now wait up to 300 s (`afb613b`), and history goes in through `rememberBulkAndWait` in chunks of 20 (`0a2316f`).
