@@ -114,7 +114,7 @@ export async function predictHistory(address: string, { limit = 50 }: { limit?: 
     for (let page = 0; page < 200; page++) {
       const suffix = `${owner}-${name}-${page}.json`;
       const result = await cached(`data/history/${suffix}`, async () => {
-        const x = await c.client.core.listEvents({ filter, limit: 50, order: 'descending', ...(before ? { before } : {}) });
+        const x = await c.events.core.listEvents({ filter, limit: 50, order: 'descending', ...(before ? { before } : {}) });
         return { events: x.events.map(normalizeEvent), hasNextPage: x.hasNextPage, endCursor: x.endCursor };
       }).catch((error) => {
         if (String(error).includes('OUT_OF_RANGE') || String(error).includes('below earliest available')) return null;

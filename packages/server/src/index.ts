@@ -546,7 +546,7 @@ async function findQueueEvent(
   if (!packageId) throw new Error('Predict queue event package missing from SDK config');
   let before: string | null = null;
   for (let page = 0; page < 20; page++) {
-    const result = await c.client.core.listEvents({
+    const result = await c.events.core.listEvents({
       filter: { eventType: `${packageId}::queue_events::${name}` },
       limit: 50,
       order: 'descending',

@@ -1,6 +1,9 @@
 import { SuiGrpcClient } from '@mysten/sui/grpc';
 import { GrpcTransport } from '@protobuf-ts/grpc-transport';
 import { ChannelCredentials } from '@grpc/grpc-js';
+import { rateLimit } from './throttle.js';
+// One limiter for the whole process: every Tatum client shares Tatum's free-plan budget of 3 requests a second.
+const tatumLimit = rateLimit(400);
 import { getConfig, PredictClient, snapStrike, type MarketDescriptor } from '@mysten/deepbook-v3/predict';
 
 export const USDC = '0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC';
@@ -16,12 +19,20 @@ export function chain(env = process.env) {
           host: 'sui-mainnet-grpc.gateway.tatum.io:443',
           channelCredentials: ChannelCredentials.createSsl(),
           meta: { 'x-api-key': env.TATUM_API_KEY! },
+          interceptors: [tatumLimit],
         }),
       })
     : new SuiGrpcClient({ network: 'mainnet', baseUrl: rpcUrl });
   const sdk = new PredictClient({ network: 'mainnet', client });
+  // Tatum's gRPC gateway refuses sui.rpc.v2.LedgerService/ListEvents, so with Tatum, event scans use the public Sui
+  // fullnode over gRPC (EIDOLON_EVENTS_RPC overrides it). Every other read and every transaction goes through Tatum.
+  const events = tatum
+    ? new SuiGrpcClient({ network: 'mainnet', baseUrl: env.EIDOLON_EVENTS_RPC ?? 'https://fullnode.mainnet.sui.io:443' })
+    : client;
   return {
     client,
+    events,
+    eventsSource: tatum ? ('public fullnode (Tatum blocks ListEvents)' as const) : ('same as reads' as const),
     predict: sdk,
     rpc: tatum ? ('Tatum' as const) : ('dev RPC (not Tatum)' as const),
     rpcUrl,
