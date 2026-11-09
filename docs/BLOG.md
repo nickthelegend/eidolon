@@ -53,4 +53,4 @@ The project learned too. The first recorded take showed an empty ghost panel, so
 
 The funded mainnet run: fund the wallets, play one player round, then a second round where the ghost recalls the first from Walrus and bets against it. Until then, everything above is labelled live, fork-only or pending.
 
-Code: `<repo link, public after Nick's yes>`. Film: `videos/eidolon/eidolon-film-v2.mp4` (link after upload).
+Code: `<repo link, public after Nick's yes>`. Film: `videos/eidolon/eidolon-film-v3.mp4` (link after upload).

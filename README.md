@@ -32,7 +32,7 @@ Only real evidence is listed. Eidolon deploys no contract of its own; it trades 
 | Tatum `SimulateTransaction` | HTTP 429 in bursts on the free plan; a 400 ms throttle with retry was added in `0ff816e`. A Tatum dry-run has not been re-recorded since | Tatum gRPC |
 | Tatum `ListEvents` | Refused by the gateway ("method not allowed"), so event scans use the public fullnode | public fullnode |
 | `POST /history/:address/remember` without keys | Refused: `Setup required: MEMWAL_MAINNET_KEY` | n/a |
-| Walrus Memory blobs on mainnet | **31**, in namespace `eidolon-v1:0x96ed1d73…2ccd2`. Details in the Walrus table below | Walrus mainnet relayer |
+| Walrus Memory blobs on mainnet | **113** across 4 namespaces (public traders), checked with `POST /api/stats` on Nov 9. Details below | Walrus mainnet relayer |
 
 **Walrus Memory on mainnet**, Nov 9 2026. All 31 blob IDs are in [docs/walrus-mainnet-2026-11-09.json](docs/walrus-mainnet-2026-11-09.json). Walrus blob IDs have no Suiscan link. The app links them on Walruscan, and a stored blob can be read from the public mainnet aggregator (row below).
 
@@ -41,13 +41,24 @@ Only real evidence is listed. Eidolon deploys no contract of its own; it trades 
 | Account ID (public, on chain) | `0xd2ca3cbe1bd663a5fe7df7c14590451bbc712255cfee59966b0b8413cdaa335a`, owner `0x0cff6ac3b0396c3b449de58472dcf9cfd55f0bb2aefaca92c43315de128c7e93` |
 | How the account was found | On chain, not from a dashboard. The relayer's `GET /config` gives package `0xe7c16fbea0560e7057e2bf7422feaa4fb313749fc69c9e9092fac7a33b81d7f5`. Its `account::DelegateKeyAdded` events list Eidolon's delegate key (label "2") under that account |
 | Delegate key | Eidolon signs with its own delegate key. `POST /api/stats` on the mainnet relayer returned the owner above |
-| Memories stored | 31 (31 unique blobs) |
+| Memories stored | 31 in this namespace (30 settled trades; the test write duplicates the first one) |
 | Namespace | `eidolon-v1:0x96ed1d73783b195ea2b9bcf9447c9a871b326ea41271f9dd3113b4dee62eccd2`, a public mainnet Predict trader whose owner is unknown, found as one of the most active traders in recent `OrderEnqueued` events |
 | Writes | 1 test write at 15:3x UTC, then 30 settled trades through `POST /history/:address/remember` from 15:38:21 to 15:40:38 UTC |
 | First blob (the test write) | `PJQ_DMK9MAlBM82wpPLkVTehX5nM8ne63HARgsKnw9o` |
 | Last blob (last ID the import returned) | `uCjfjS6H3W8sm9oU3LWOCyDw06Oga6ltatrdt9r8UQ4` |
 | Recall | `GET /ghost/0x96ed1d73…2ccd2` returned 31 hits (31 unique blobs). Profile: 32% UP bets, 81% hit rate, average size 4.84 USDC |
 | Ghost panel in the web app | With Walrus configured, `GET /history/0x96ed1d73…2ccd2` recalled the address's memories and built the ghost from them. The panel showed "I recalled 31 of your trades from Walrus Memory: 32% UP, 81% hit rate…" with links to the recalled blobs on Walruscan (checked in a browser, `781d916`) |
+
+**All Eidolon namespaces on Walrus mainnet (Nov 9 2026, `POST /api/stats`):**
+
+| Namespace (public Predict trader, owner unknown) | Memories | How they were written |
+| --- | ---: | --- |
+| `eidolon-v1:0x96ed1d73…2ccd2` | 31 | Bulk import of 30 settled trades plus one test write (above) |
+| `eidolon-v1:0x6a1aa9f0…b8c6` | 21 | "Remember this trader on Walrus" button, Nov 9 ~16:28 UTC (a film take that failed on a UI bug, fixed in `726d814`) |
+| `eidolon-v1:0x6991b08a…8318` | 54 | The same route from the browser while debugging that bug, 317 s for 3 bulk chunks |
+| `eidolon-v1:0x7c925046…486e` | 7 | "Remember this trader on Walrus" on camera for film v3 (click to certified in about 66 s) |
+| **Total** | **113** | |
+
 | Public aggregator read | `GET https://aggregator.walrus-mainnet.walrus.space/v1/blobs/PJQ_DMK9MAlBM82wpPLkVTehX5nM8ne63HARgsKnw9o` returned HTTP 200, 1101 bytes |
 | Chain reads | Through Tatum (`/status` returned `rpc: "Tatum"`) |
 
@@ -84,7 +95,7 @@ Mainnet gRPC reads and a real enqueue simulation pass with the public developmen
 
 ## Film
 
-`videos/eidolon/eidolon-film-v2.mp4` (not public yet; the link goes here once it's uploaded). It shows real mainnet reads and dry-runs of a public address, with nothing signed, and says so on screen.
+`videos/eidolon/eidolon-film-v3.mp4` (2:16, not public yet; the link goes here once it's uploaded). It writes a public trader's 7 settled trades to Walrus mainnet on camera (the certification wait is sped up and badged) and rebuilds the ghost from Walrus recall, with every read through Tatum. It shows real mainnet reads and dry-runs of a public address, with nothing signed, and says so on screen.
 
 ## Run
 

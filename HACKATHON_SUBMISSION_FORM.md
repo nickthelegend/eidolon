@@ -59,7 +59,7 @@ What works today, with no keys: live markets, quotes and mainnet dry-runs; a set
 
 ## Demo video
 
-`videos/eidolon/eidolon-film-v2.mp4`: not public yet. **Nick fills** the public link after upload. The film shows real mainnet reads and dry-runs of a public address, with nothing signed, and says so on screen. A version showing the Walrus memories and a live signed round is **PENDING** on the funded mainnet run.
+`videos/eidolon/eidolon-film-v3.mp4`: not public yet. **Nick fills** the public link after upload. The film shows real mainnet reads and dry-runs of a public address, with nothing signed, and says so on screen. A version showing the Walrus memories and a live signed round is **PENDING** on the funded mainnet run.
 
 ## Blog post
 
@@ -96,7 +96,7 @@ Solo: Nivesh Gajengi (Nick), GitHub `nickthelegend`.
 | Requirement | State |
 | --- | --- |
 | Walrus Memory integrated | Live on mainnet with Eidolon's own delegate key; refuses with "Setup required" without keys |
-| Writing on mainnet, at least 10 memories | **Done**: 31 memories on Walrus mainnet, recalled through `GET /ghost/:address` |
+| Writing on mainnet, at least 10 memories | **Done**: 113 memories on Walrus mainnet across 4 public-trader namespaces (31 in the main one), recalled through `GET /history/:address` and `GET /ghost/:address` |
 | Tatum RPC for on-chain data | Live for reads and transactions with `TATUM_API_KEY`; events go through the public fullnode (Tatum blocks `ListEvents`) |
 | Published blog post | Draft in docs/BLOG.md; publishing is **PENDING** |
 | Working demo | Read-only mainnet demo and Walrus recall work; a signed mainnet round and automatic ghost placement are **PENDING** on hub funding (rehearsed on a local fork only) |
