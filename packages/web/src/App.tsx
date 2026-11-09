@@ -245,9 +245,8 @@ export function App() {
 
       <nav className="tabbar" aria-label="Screens">
         {VIEWS.map((v) => (
-          <a key={v.id} href={`#/${v.id}`} className={view === v.id ? 'on' : ''} aria-current={view === v.id ? 'page' : undefined}>
+          <a key={v.id} href={`#/${v.id}`} className={view === v.id ? 'on' : ''} aria-current={view === v.id ? 'page' : undefined} aria-label={v.label} title={v.label}>
             <TabIcon id={v.id} />
-            <span>{v.short}</span>
           </a>
         ))}
       </nav>

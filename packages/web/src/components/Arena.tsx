@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { clockText, humanError, pct, post, suiscan, usd, usdc, walruscan, short, type FundingPlan, type GhostFeed, type HistoryResponse, type Market, type Plan, type PriceSample, type Round, type Side } from '../api';
+import { ago, clockText, humanError, pct, post, suiscan, usd, usdc, walruscan, short, type FundingPlan, type GhostFeed, type HistoryResponse, type Market, type Plan, type PriceSample, type Round, type Side } from '../api';
 import { LiveChart } from './LiveChart';
 
 /** The arena: you and your ghost face off across the live BTC line, and you call the next close. */
@@ -157,7 +157,7 @@ export function Arena({
             <small>
               <i className={`dot ${feed?.haunting ? 'dot-live' : ''}`} aria-hidden />
               {feed?.haunting
-                ? `Autonomous · trading every round${lastGhost ? ` · last move ${Math.max(0, Math.round((now - Date.parse(lastGhost.createdAt)) / 1000))}s ago` : ''}`
+                ? `Autonomous · trading every round${lastGhost ? ` · last move ${ago(lastGhost.createdAt, now)}` : ''}`
                 : 'Turn on autonomous trading →'}
             </small>
           </span>

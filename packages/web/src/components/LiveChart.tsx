@@ -118,6 +118,9 @@ export function LiveChart({
               <stop offset="0" stopColor="var(--ember)" stopOpacity=".22" />
               <stop offset="1" stopColor="var(--ember)" stopOpacity="0" />
             </linearGradient>
+            <clipPath id="plot">
+              <rect x={0} y={0} width={w - padR} height={h} />
+            </clipPath>
             <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <rect width="7" height="7" fill="rgba(255,92,122,.07)" />
               <line x1="0" y1="0" x2="0" y2="7" stroke="rgba(255,92,122,.35)" strokeWidth="1.4" />
@@ -153,8 +156,10 @@ export function LiveChart({
               <text x={closeX - 6} y={padT + 10} textAnchor="end">close</text>
             </g>
           )}
-          {area && <path d={area} fill="url(#area)" />}
-          <path d={path} className="price-line" pathLength={1} />
+          <g clipPath="url(#plot)">
+            {area && <path d={area} fill="url(#area)" />}
+            <path d={path} className="price-line" pathLength={1} />
+          </g>
           {lines.map((l) => (
             <g key={l.kind} className={`strike strike-${l.kind}`}>
               <line x1={0} x2={w - padR} y1={y(l.value)} y2={y(l.value)} />
