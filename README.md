@@ -18,6 +18,12 @@ Open http://localhost:5173. The server runs at http://localhost:8787. Without `.
 
 Set `EIDOLON_PORT` and `EIDOLON_WEB_PORT` to move the server and Vite ports together; Vite proxies `/api` to `EIDOLON_PORT`.
 
+## Demo signer (recording only)
+
+For the recorded headless mainnet demo, set `DEMO_SIGNER=I_UNDERSTAND_SERVER_HOLDS_KEYS` and put the Sui `suiprivkey…` string in `DEMO_PLAYER_KEY` in this repo's gitignored `.env`. The wallet picker then offers **Demo signer (server-held key)**. A persistent badge identifies the connected wallet as a server-held demo key using real mainnet funds.
+
+This is a custodial demo wallet: the server holds its key, and the account is funded with a small amount from the hub. It is off by default. The server signs only its own prepared transaction bytes for that account within 60 seconds; `/execute` still requires the existing mainnet write gate and other live prerequisites. Never use the demo key as a personal wallet or expose this server to untrusted clients during recording.
+
 ## View as
 
 Open `?as=0x...` with a full 64-digit Sui address, or enter an address in the Arena while disconnected. The banner identifies the address and marks the view read-only. Quotes, ghost previews, enqueue simulations, and funding simulations use that address as the owner. Signing controls are hidden. If a wallet connects, its address takes precedence over the URL.

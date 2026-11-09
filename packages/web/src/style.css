@@ -29,6 +29,22 @@
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   color-scheme: dark;
 }
+.demo-signer-badge {
+  position: fixed;
+  z-index: 10000;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 20px);
+  padding: 10px 16px;
+  border: 2px solid #141414;
+  border-radius: 8px;
+  background: #ffe06a;
+  color: #141414;
+  font: 700 14px/1.2 ui-sans-serif, sans-serif;
+  text-align: center;
+  box-shadow: 0 3px 16px #0009;
+}
 
 * {
   box-sizing: border-box;

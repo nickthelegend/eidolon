@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useCurrentAccount, useDAppKit } from '@mysten/dapp-kit-react';
+import { useCurrentAccount, useCurrentWallet, useDAppKit } from '@mysten/dapp-kit-react';
+import { DEMO_WALLET_NAME } from './demoWallet';
 import { ConnectButton } from '@mysten/dapp-kit-react/ui';
 import { api, post, short, usd, usdc, type FundingPlan, type Market, type Plan, type Round, type Side, type Status, humanError, type HistoryResponse } from './api';
 import { Countdown } from './components/Countdown';
@@ -10,6 +11,8 @@ import { Stage } from './components/Stage';
 
 export function App() {
   const account = useCurrentAccount();
+  const wallet = useCurrentWallet();
+  const demoConnected = Boolean(account && wallet?.name === DEMO_WALLET_NAME);
   const dAppKit = useDAppKit();
   const [status, setStatus] = useState<Status | null>(null);
   const [markets, setMarkets] = useState<Market[]>([]);
@@ -150,6 +153,7 @@ export function App() {
 
   return (
     <div className="shell">
+      {demoConnected && <div className="demo-signer-badge">Demo signer · server-held demo key · real mainnet funds</div>}
       <header className="top">
         <a className="brand" href="/" aria-label="Eidolon home">
           <img className="brand-mark" src="/art/eidolon-mark.webp" alt="" width={32} height={32} />
@@ -349,7 +353,7 @@ export function App() {
                     className="num"
                     type="number"
                     inputMode="decimal"
-                    min="1"
+                    min="2"
                     step="0.5"
                     value={amount}
                     onChange={(e) => {
@@ -381,7 +385,7 @@ export function App() {
                 'Connect a Sui wallet or view an address'
               )}
             </button>
-            <p className="fine">Min 1 USDC · 0.02 USDC queued-order fee · settles on the Pyth price at expiry</p>
+            <p className="fine">Minimum 2 USDC. Predict takes a 0.02 USDC fee and rounds to whole lots.</p>
           </div>
 
           <Funding live={live && !readOnly && Boolean(account)} owner={owner} signAndSend={signAndSend} />

@@ -97,7 +97,7 @@ export async function plan(
   amount: number,
   strike?: number,
 ) {
-  if (!Number.isFinite(amount) || amount < 1) throw new Error('Minimum size is 1 USDC');
+  if (!Number.isFinite(amount) || amount < 2) throw new Error('Minimum size is 2 USDC');
   const c = chain();
   const descriptor: MarketDescriptor = {
     underlying: 'BTC',
