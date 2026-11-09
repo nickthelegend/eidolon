@@ -41,7 +41,8 @@ test('opposite ghost grows when recalled player loses', () => {
   assert.deepEqual(losing.blobIds, ['blob0', 'blob1', 'blob2', 'blob3']);
 });
 test('memory round trip and empty memory refusal', () => {
-  assert.deepEqual(decodeMemory(encodeMemory(history(true, 2)[0].memory)), history(true, 2)[0].memory);
+  const memory = history(true, 2)[0].memory;
+  assert.deepEqual(decodeMemory(encodeMemory(memory)), memory);
   assert.throws(() => ghostDecision('up', [], context, 10), /requires recalled/);
   assert.equal(decodeMemory('EIDOLON_V1 {"kind":"round","size":-5}'), null);
 });
