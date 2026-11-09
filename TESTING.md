@@ -17,3 +17,7 @@ Run on 2026-11-09 against Sui mainnet with the public development gRPC endpoint.
 | Vite `/?as=<demo address>` | HTTP 200 on port 5181; the URL, owner selection, read-only banner, and hidden signing controls are implemented in the app. Browser inspection was unavailable in this environment. |
 
 The public development endpoint marks chain reads **dev RPC (not Tatum)**. Its event history has a finite checkpoint window, so older trades can require an archival RPC. Tatum JSON-RPC, Walrus writes, wallet signing, and real Predict orders remain unverified because credentials and funded signing wallets were not supplied. The existing live test can fail during a market rollover or if no recent account stays funded; it reports the failure instead of claiming a simulated success.
+
+## Round-2 judging pass (Nov 9 2026)
+- `pnpm test`: 10/10 passed; `pnpm -r build` passed.
+- Checked by hand (headless Chrome, 1440 and 375 px, no overflow), previewing public address `0xa9eb…c79c`: 15 settled trades loaded from mainnet, and the ghost panel showed the history-built ghost (27% UP, 73% hit rate, DOWN 4.87 USDC at the nearest admissible strike, 49% odds). A far strike showed the refusal inside the arena. The deposit dry-run read "holds 0.00 USDC in its wallet; this deposit needs 10.00 USDC".
