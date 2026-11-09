@@ -335,6 +335,17 @@ const server = createServer(async (req, res) => {
             ? 'entry-band blocked'
             : `unverified: ${safeError(e)}`;
       }
+      // Where the ghost would stand: the live pricer picks the opposite-side strike it would bet at.
+      let ghostPreview: { side: 'up' | 'down'; strike: number; probability: number; exact: boolean; playerProbability: number } | null = null;
+      try {
+        const pricer = await c.predict.read.pricer({ underlying: 'BTC', expiryMs: m.expiryMs });
+        const playerStrike = typeof descriptor.strike === 'number' ? descriptor.strike : (m.referencePrice ?? pricer.forward);
+        const ghostSide = input.side === 'up' ? 'down' : 'up';
+        const pick = ghostStrike(pricer, ghostSide, playerStrike, m.admissionTickSize);
+        if (pick) ghostPreview = { side: ghostSide, ...pick, playerProbability: pricer.probability(playerStrike, input.side) };
+      } catch {
+        ghostPreview = null;
+      }
       let dryRun: unknown = null;
       let transaction: string | null = null;
       if (quote.accepting) {
@@ -378,6 +389,7 @@ const server = createServer(async (req, res) => {
         accepting: quote.accepting,
         refusal: quote.refusal,
         mirror,
+        ghostPreview,
         quote: {
           potentialPayout: quote.potentialPayout,
           orderFee: quote.orderFee,
