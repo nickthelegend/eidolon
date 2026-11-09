@@ -19,6 +19,8 @@ import {
 } from '@eidolon/core';
 import { fromBase64, toBase64 } from '@mysten/sui/utils';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+import { createDemoSigner } from './demo-signer.js';
+import { config as loadEnv } from 'dotenv';
 import { cost, decodeMoveAbort, describePredictError } from '@mysten/deepbook-v3/predict';
 
 // Turns a Predict Move abort into the SDK's own plain sentence,
@@ -103,7 +105,7 @@ const prepared = new Map<
     createdAt: number;
   }
 >();
-const preparedFunding = new Map<string, number>();
+const preparedFunding = new Map<string, { address: string; at: number }>();
 let lastHistoryRememberAt = 0;
 const executed = new Map<string, NonNullable<ReturnType<typeof prepared.get>>>();
 function broadcast(value: unknown) {
@@ -119,6 +121,15 @@ async function save() {
 const fork = forkUrl('EIDOLON');
 const mainnetLive = () => !fork && process.env.EIDOLON_ALLOW_MAINNET === 'I_ACKNOWLEDGE_REAL_USDC';
 const writesOn = () => mainnetLive() || forkWrites('EIDOLON');
+if (process.env.DEMO_SIGNER === 'I_UNDERSTAND_SERVER_HOLDS_KEYS' && !fork)
+  loadEnv({ path: new URL('../../../.env', import.meta.url), quiet: true });
+const demoSigner = createDemoSigner(
+  [{ label: 'Eidolon player', variable: 'DEMO_PLAYER_KEY' }],
+  { get: (bytes) => { const p = prepared.get(bytes); return p && { address: p.player, at: p.createdAt }; } },
+  preparedFunding,
+  () => writesOn() && !fork,
+  fork ? { DEMO_SIGNER: undefined } : process.env,
+);
 const modeLabel = () =>
   fork ? (forkWrites('EIDOLON') ? 'LOCAL FORK writes enabled' : 'LOCAL FORK dry-run only') : mainnetLive() ? 'live writes enabled' : 'dry-run only';
 const missing = (name: string) => (process.env[name] ? null : `Setup required: ${name}`);
@@ -183,6 +194,7 @@ const server = createServer(async (req, res) => {
     return;
   }
   try {
+    if (await demoSigner(req, res)) return;
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname === '/events') {
       res.writeHead(200, {
@@ -360,7 +372,7 @@ const server = createServer(async (req, res) => {
           status: x.$kind === 'Transaction' ? 'success' : 'failure',
           error: x.$kind === 'FailedTransaction' ? (explainAbort(x.FailedTransaction.status.error) ?? x.FailedTransaction.status.error?.message ?? null) : null,
         }));
-      if (dry.status === 'success') preparedFunding.set(encoded, Date.now());
+      if (dry.status === 'success') preparedFunding.set(encoded, { address: input.owner.toLowerCase(), at: Date.now() });
       respond(res, 200, {
         dryRun: dry,
         transaction: dry.status === 'success' ? encoded : null,
@@ -478,7 +490,7 @@ const server = createServer(async (req, res) => {
       const input = await body(req);
       const p = prepared.get(input.bytes);
       const fundingAt = preparedFunding.get(input.bytes);
-      if ((!p || Date.now() - p.createdAt > 30_000) && (!fundingAt || Date.now() - fundingAt > 60_000))
+      if ((!p || Date.now() - p.createdAt > 30_000) && (!fundingAt || Date.now() - fundingAt.at > 60_000))
         throw new Error('Transaction was not recently prepared by Eidolon');
       prepared.delete(input.bytes);
       preparedFunding.delete(input.bytes);
