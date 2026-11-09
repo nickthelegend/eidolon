@@ -16,6 +16,20 @@ Your ghost takes the other side. It isn't a random bot. It's built from your own
 
 An optional language model writes one taunt line from the recalled facts. It can't change the bet: a deterministic, tested policy decides side, size and strike.
 
+## The ghost trades on its own
+
+A ghost that only appears when you trade is a mirror. Eidolon's ghost is an agent. Turn on **haunt mode** for an address and, every 5-minute round, the ghost works through these steps by itself:
+
+1. `recall_memories`: it reads that trader's memories back from Walrus mainnet.
+2. `read_habits`: for example, "bets UP 14% of the time, hits 57%".
+3. `predict_player`: which side they would most likely take.
+4. `pick_strike`: the opposite side, at a strike inside Predict's entry band.
+5. `size_bet`: from their own average, scaled up if they lose more than they win.
+6. `quote` and `dry_run`: against Predict's on-chain pricer.
+7. `place_order`: from the ghost's own wallet, within a per-bet and per-day cap.
+
+After the market closes, the ghost checks the Pyth settlement and records whether it won. Every step lands in the app's **Ghost** feed as it happens, so you can watch it think. When the server isn't allowed to send orders, the feed says so, and still settles each call as "would have won" or "would have lost". On the night of Nov 9, running against one public trader's memories, it called 25 rounds on its own and would have won 10 of the 24 that settled.
+
 ## How it uses Walrus Memory
 
 The ghost's memory lives in Walrus Memory, through the `@mysten-incubation/memwal` SDK on the mainnet relayer. Each player gets their own namespace.
