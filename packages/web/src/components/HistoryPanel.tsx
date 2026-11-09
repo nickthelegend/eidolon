@@ -127,7 +127,7 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
               <tr>
                 <th>Call</th>
                 <th className="r">Strike <i>USD</i></th>
-                <th className="r">Size <i>USDC</i></th>
+                <th className="r hide-sm">Size <i>USDC</i></th>
                 <th className="r">P&amp;L <i>USDC</i></th>
                 <th className="r hide-sm">On SuiScan</th>
               </tr>
@@ -139,7 +139,7 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
                     <span className={`pill pill-${trade.side}`}>{trade.side === 'up' ? '↑ Higher' : '↓ Lower'}</span>
                   </td>
                   <td className="r num">${trade.strike.toLocaleString('en-US')}</td>
-                  <td className="r num muted">{trade.size.toFixed(2)}</td>
+                  <td className="r num muted hide-sm">{trade.size.toFixed(2)}</td>
                   <td className={`r num ${trade.pnl > 0 ? 'up' : trade.pnl < 0 ? 'down' : ''}`}>{usdc(trade.pnl)}</td>
                   <td className="r hide-sm links">
                     <a href={suiscan(trade.enqueueDigest)} target="_blank" rel="noreferrer">order</a>

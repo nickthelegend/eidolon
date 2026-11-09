@@ -475,6 +475,7 @@ export function App() {
                     reset();
                   }}
                 >
+                  <img src={`/art/v2/eidolon2-hourglass-${m.cadence}m.webp`} alt="" width={18} height={18} />
                   <span>{m.cadence} min</span>
                   <small className="num">{m.mintPaused ? 'paused' : clockText(m.expiryMs - now)}</small>
                 </button>
@@ -616,6 +617,11 @@ const STEPS = [
 
 function HowItWorks() {
   return (
+    <>
+    <div className="how-banner">
+      <img src="/art/v2/eidolon2-duel.webp" alt="" width={1536} height={1024} loading="lazy" />
+      <p>One market. Two bets on opposite sides. Pyth settles both.</p>
+    </div>
     <ol className="how">
       {STEPS.map((s, i) => (
         <li key={s.art}>
@@ -626,6 +632,7 @@ function HowItWorks() {
         </li>
       ))}
     </ol>
+    </>
   );
 }
 
