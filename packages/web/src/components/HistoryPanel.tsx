@@ -59,72 +59,121 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup, onH
     }
   }
 
+  const [expanded, setExpanded] = useState(false);
+  const wins = history?.trades.filter((t) => t.pnl > 0).length ?? 0;
+  const net = history?.trades.reduce((n, t) => n + t.pnl, 0) ?? 0;
+
   return (
     <section className="panel history" aria-labelledby="history-title">
       <header className="panel-head">
-        <h2 id="history-title">Your trading history</h2>
-        <p className="muted small">settled DeepBook Predict trades, read from Sui mainnet</p>
+        <div>
+          <p className="eyebrow">Where the ghost comes from</p>
+          <h2 id="history-title">Your trading history</h2>
+        </div>
+        <p className="muted small">Settled DeepBook Predict trades, read from Sui mainnet</p>
       </header>
       {!history ? (
-        <div className="empty">
-          <img className="empty-art" src="/art/eidolon-hourglass.webp" alt="" width={96} height={96} />
-          <b>{owner ? `Read ${short(owner)}’s past trades` : 'Connect or preview an address'}</b>
-          <p>
-            Your ghost can start from what you already did: every settled Predict trade with its fill and payout,
-            straight from the chain.
-          </p>
-          <button className="primary" disabled={!owner || busy} onClick={load}>
-            {busy ? 'Reading mainnet…' : 'Read my Predict history'}
-          </button>
+        <div className="empty empty-wide">
+          <img className="empty-art" src="/art/eidolon-hourglass.webp" alt="" width={88} height={88} />
+          <div>
+            <b>{owner ? `Read ${short(owner)}’s past trades` : 'Connect or preview an address'}</b>
+            <p>
+              Your ghost can start from what you already did: every settled Predict trade with its fill and payout,
+              straight from the chain. Takes about 20 seconds.
+            </p>
+            <button className="primary" disabled={!owner || busy} onClick={load}>
+              {busy ? (
+                <>
+                  <span className="spin" aria-hidden /> Reading mainnet…
+                </>
+              ) : (
+                'Read my Predict history'
+              )}
+            </button>
+          </div>
         </div>
       ) : history.trades.length === 0 ? (
-        <div className="empty">
-          <b>No settled trades found</b>
-          <p>No complete Predict trade with fill and payout events in the chain history this RPC can reach.</p>
+        <div className="empty empty-wide">
+          <div>
+            <b>No settled trades found</b>
+            <p>No complete Predict trade with fill and payout events in the chain history this RPC can reach.</p>
+          </div>
         </div>
       ) : (
-        <>
-          <p className="muted small">
-            {history.trades.length} settled trades, each with a verified fill and payout event.
-          </p>
-          <HBar label="Bets UP" value={history.profile.upBias} />
-          <HBar label="Hit rate" value={history.profile.hitRate} />
-          <p className="muted small num">Average size {history.profile.averageSize.toFixed(2)} USDC</p>
-          <ul className="trades">
-            {history.trades.map((trade) => (
-              <li key={trade.fillDigest}>
-                <span className={`side-pill side-${trade.side}`}>{trade.side === 'up' ? 'UP' : 'DOWN'}</span>
-                <span className="num">${trade.strike.toLocaleString('en-US')}</span>
-                <span className="num muted">{trade.size.toFixed(2)} USDC</span>
-                <b className={`num ${trade.pnl > 0 ? 'up' : trade.pnl < 0 ? 'down' : ''}`}>{usdc(trade.pnl)}</b>
-                <span className="trade-links">
-                  <a href={suiscan(trade.enqueueDigest)} target="_blank" rel="noreferrer">order</a>
-                  <a href={suiscan(trade.fillDigest)} target="_blank" rel="noreferrer">fill</a>
-                  <a href={suiscan(trade.payoutDigest)} target="_blank" rel="noreferrer">payout</a>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <div className="next-move">
-            <p className="eyebrow spectral">What your ghost would do next</p>
-            {history.decision ? (
-              <p className="next-line">
-                Against your <b>{side.toUpperCase()}</b> on the selected market, it bets{' '}
-                <span className={`side-pill side-${history.decision.side}`}>{history.decision.side.toUpperCase()}</span>{' '}
-                with <b className="num">{history.decision.size.toFixed(2)} USDC</b>.
-              </p>
-            ) : (
-              <p className="muted small">Select an active market to see the decision.</p>
+        <div className="history-body">
+          <div className="history-table">
+            <div className="trades-head" aria-hidden>
+              <span>Side</span>
+              <span>Strike (USD)</span>
+              <span>Size (USDC)</span>
+              <span>P&amp;L (USDC)</span>
+              <span>On SuiScan</span>
+            </div>
+            <ul className={`trades ${expanded ? 'open' : ''}`}>
+              {history.trades.map((trade) => (
+                <li key={trade.fillDigest}>
+                  <span className={`side-pill side-${trade.side}`}>{trade.side === 'up' ? 'UP' : 'DOWN'}</span>
+                  <span className="num t-strike">${trade.strike.toLocaleString('en-US')}</span>
+                  <span className="num muted t-size">
+                    {trade.size.toFixed(2)}
+                    <i> USDC</i>
+                  </span>
+                  <b className={`num t-pnl ${trade.pnl > 0 ? 'up' : trade.pnl < 0 ? 'down' : ''}`}>{usdc(trade.pnl)}</b>
+                  <span className="trade-links">
+                    <a href={suiscan(trade.enqueueDigest)} target="_blank" rel="noreferrer">order</a>
+                    <a href={suiscan(trade.fillDigest)} target="_blank" rel="noreferrer">fill</a>
+                    <a href={suiscan(trade.payoutDigest)} target="_blank" rel="noreferrer">payout</a>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {history.trades.length > 8 && (
+              <button className="more" aria-expanded={expanded} onClick={() => setExpanded((x) => !x)}>
+                {expanded ? 'Show fewer' : `Show all ${history.trades.length} trades`}
+              </button>
             )}
-            <p className="muted small">{history.source}</p>
           </div>
-          <button className="primary" disabled={rememberDisabled} onClick={remember}>
-            {rememberLabel}
-          </button>
-        </>
+
+          <div className="history-side">
+            <div className="tally">
+              <div>
+                <small>Settled</small>
+                <b className="num">{history.trades.length}</b>
+              </div>
+              <div>
+                <small>Won</small>
+                <b className="num">{wins}</b>
+              </div>
+              <div>
+                <small>Net (USDC)</small>
+                <b className={`num ${net > 0 ? 'up' : net < 0 ? 'down' : ''}`}>{usdc(net)}</b>
+              </div>
+            </div>
+            <p className="fine">Each with a verified fill and payout event.</p>
+            <HBar label="Bets UP" value={history.profile.upBias} />
+            <HBar label="Hit rate" value={history.profile.hitRate} />
+            <p className="fine num">Average size {history.profile.averageSize.toFixed(2)} USDC</p>
+            <div className="next-move">
+              <p className="eyebrow spectral">What your ghost would do next</p>
+              {history.decision ? (
+                <p className="next-line">
+                  Against your <b>{side.toUpperCase()}</b> on the selected market, it bets{' '}
+                  <span className={`side-pill side-${history.decision.side}`}>{history.decision.side.toUpperCase()}</span>{' '}
+                  with <b className="num">{history.decision.size.toFixed(2)} USDC</b>.
+                </p>
+              ) : (
+                <p className="fine">Select an active market to see the decision.</p>
+              )}
+              <p className="fine">{history.source}</p>
+            </div>
+            <button className="primary" disabled={rememberDisabled} onClick={remember}>
+              {rememberLabel}
+            </button>
+          </div>
+        </div>
       )}
       {message && (
-        <p className="muted small" role="status">
+        <p className="msg" role="status">
           {message}
         </p>
       )}
