@@ -69,6 +69,7 @@ export type HistoryResponse = {
   source: string;
   blobIds?: string[];
   memoryError?: string | null;
+  memoryByFill?: Record<string, string>;
 };
 
 export type Leg = { digest: string; pnl?: number; fillDigest?: string; payoutDigest?: string };
@@ -84,6 +85,8 @@ export type GhostProfile = {
 export type Round = {
   digest: string;
   player: string;
+  expiryMs: number;
+  createdAt?: string;
   cadence: 1 | 5;
   side: Side;
   strike: number;
@@ -175,3 +178,40 @@ export const clockText = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
+
+export type GhostStep = { at: string; tool: string; detail: string; ok: boolean };
+export type GhostTrade = {
+  id: string;
+  player: string;
+  marketId: string;
+  expiryMs: number;
+  cadence: 1 | 5;
+  playerSide: Side;
+  side: Side;
+  strike?: number;
+  exact?: boolean;
+  probability?: number;
+  size: number;
+  profile: { upBias: number; hitRate: number; recalled: number };
+  blobIds: string[];
+  live: boolean;
+  status: string;
+  steps: GhostStep[];
+  leg?: Leg & { recordId?: string };
+  settlement?: number;
+  won?: boolean;
+  createdAt: string;
+};
+export type GhostFeed = {
+  ghost: string | null;
+  mode: 'live' | 'dry-run';
+  haunting: { player: string; cadence: 1 | 5; since: string } | null;
+  haunts: number;
+  stats: { cycles: number; placed: number; settled: number; wins: number; pnl: number };
+  trades: GhostTrade[];
+};
+export const ago = (iso: string, now: number) => {
+  const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000));
+  return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.floor(s / 60)}m ago` : `${Math.floor(s / 3600)}h ago`;
+};
+export const hm = (t: number | string) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });

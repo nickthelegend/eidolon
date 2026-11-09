@@ -62,7 +62,7 @@ export function LiveChart({
   }, []);
 
   const narrow = w < 560;
-  const h = narrow ? 240 : 320;
+  const h = narrow ? 220 : 270;
   const padR = narrow ? 64 : 84;
   const padB = 28;
   const padT = 18;
@@ -142,6 +142,11 @@ export function LiveChart({
             />
           )}
           {dead && <rect x={0} width={w - padR} y={y(dead[1])} height={Math.max(2, y(dead[0]) - y(dead[1]))} fill="url(#hatch)" />}
+          {dead && y(dead[0]) - y(dead[1]) > 14 && (
+            <g className="strike strike-dead">
+              <Chip x={(w - padR) / 2 + 60} y={(y(dead[0]) + y(dead[1])) / 2} text="DEAD ZONE · both lose" />
+            </g>
+          )}
           {closeX != null && (
             <g className="close-line">
               <line x1={closeX} x2={closeX} y1={padT} y2={h - padB} />
@@ -153,10 +158,11 @@ export function LiveChart({
           {lines.map((l) => (
             <g key={l.kind} className={`strike strike-${l.kind}`}>
               <line x1={0} x2={w - padR} y1={y(l.value)} y2={y(l.value)} />
-              <text x={8} y={y(l.value) + (l.side === 'up' ? -7 : 15)}>
-                {l.side === 'up' ? '↑ ' : '↓ '}
-                {l.label} {usd(l.value)}
-              </text>
+              <Chip
+                x={w - padR - 12}
+                y={y(l.value) + (l.kind === 'ghost' && you && you.value > l.value ? 14 : l.kind === 'you' && gh && gh.value > l.value ? 14 : -14)}
+                text={`${l.kind === 'you' ? 'YOU' : l.kind === 'ghost' ? 'GHOST' : 'SUGGESTED'} · ${l.side === 'up' ? 'HIGHER above' : 'LOWER below'} ${usd(l.value)}`}
+              />
             </g>
           ))}
           {dot && (
@@ -171,11 +177,17 @@ export function LiveChart({
           )}
         </svg>
       )}
-      {dead && (
-        <p className="chart-note">
-          <i className="sw sw-dead" aria-hidden /> Dead zone {usd(dead[1] - dead[0])} wide: if BTC closes in here, you both lose. Predict only opens bets it prices at 15–50%, so the ghost stands at the nearest strike it can.
-        </p>
-      )}
     </div>
+  );
+}
+
+/** A small label chip, right-aligned at x, vertically centred on y. */
+function Chip({ x, y, text }: { x: number; y: number; text: string }) {
+  const width = text.length * 6.9 + 18;
+  return (
+    <g className="chip-g" transform={`translate(${Math.max(4, x - width)},${y - 11})`}>
+      <rect width={width} height={22} rx={6} />
+      <text x={9} y={15}>{text}</text>
+    </g>
   );
 }
