@@ -106,6 +106,18 @@ const prepared = new Map<
   }
 >();
 const preparedFunding = new Map<string, { address: string; at: number }>();
+// Tatum's free plan allows about 3 requests a second, and every open page polls /status and /markets every 15 s.
+// Short shared caches with in-flight de-duplication keep those polls from queueing behind each other.
+const memoStore = new Map<string, { at: number; value: Promise<unknown> }>();
+function memo<T>(key: string, ttlMs: number, run: () => Promise<T>): Promise<T> {
+  const hit = memoStore.get(key);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.value as Promise<T>;
+  const value = run();
+  memoStore.set(key, { at: Date.now(), value });
+  value.catch(() => memoStore.delete(key));
+  return value;
+}
+const marketsCached = () => memo('markets', 8_000, () => markets());
 const executed = new Map<string, NonNullable<ReturnType<typeof prepared.get>>>();
 function broadcast(value: unknown) {
   for (const res of clients) res.write(`data: ${JSON.stringify(value)}\n\n`);
@@ -157,7 +169,7 @@ async function body(req: AsyncIterable<Uint8Array>) {
   return JSON.parse(s);
 }
 async function marketList() {
-  const list = (await markets()).markets;
+  const list = (await marketsCached()).markets;
   const forward = list.find((x) => x.forward)?.forward;
   if (forward != null) {
     priceSamples.push({ at: Date.now(), forward });
@@ -210,22 +222,25 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/status') {
       const forkInfo = fork ? await forkStatus(chain().client) : null;
       let rpc = forkInfo ? forkInfo.label : process.env.TATUM_API_KEY ? 'Tatum' : 'dev RPC (not Tatum)';
-      let chainError = null;
-      try {
-        await chain().predict.read.executionMode();
-      } catch (e) {
-        chainError = safeError(e);
-      }
-      let ghostBalance: number | null = null;
-      if (process.env.EIDOLON_GHOST_KEY && !chainError) {
+      const { chainError, ghostBalance } = await memo('status-chain', 20_000, async () => {
+        let chainError: string | null = null;
         try {
-          ghostBalance = await chain().predict.read.balance(
-            Ed25519Keypair.fromSecretKey(process.env.EIDOLON_GHOST_KEY).toSuiAddress(),
-          );
-        } catch {
-          /* status remains unknown */
+          await chain().predict.read.executionMode();
+        } catch (e) {
+          chainError = safeError(e);
         }
-      }
+        let ghostBalance: number | null = null;
+        if (process.env.EIDOLON_GHOST_KEY && !chainError) {
+          try {
+            ghostBalance = await chain().predict.read.balance(
+              Ed25519Keypair.fromSecretKey(process.env.EIDOLON_GHOST_KEY).toSuiAddress(),
+            );
+          } catch {
+            /* status remains unknown */
+          }
+        }
+        return { chainError, ghostBalance };
+      });
       respond(res, 200, {
         rpc,
         chainError,
@@ -244,7 +259,7 @@ const server = createServer(async (req, res) => {
       return;
     }
     if (url.pathname === '/markets') {
-      const result = await markets();
+      const result = await marketsCached();
       const forward = result.markets.find((x) => x.forward)?.forward;
       if (forward != null) {
         priceSamples.push({ at: Date.now(), forward });
@@ -318,12 +333,14 @@ const server = createServer(async (req, res) => {
         // Storing public trade history on Walrus moves no funds, so it needs only the Walrus keys, not the USDC gate.
         const trades = await predictHistory(address, { limit: 200 });
         const { blobIds, failed } = await memoryFor(address).rememberMany(trades);
+        memoStore.delete(`recall:${address}`); // the next read rebuilds the ghost from what Walrus now holds
         if (failed.length) throw new Error(`Walrus stored ${blobIds.length} of ${trades.length} trade memories; ${failed.length} failed: ${failed[0].error}`);
         respond(res, 200, { blobIds });
         return;
       }
       if (req.method !== 'GET') throw new Error('Method not allowed');
-      const trades = await predictHistory(address, { limit: Number(url.searchParams.get('limit') ?? 20) });
+      const limit = Number(url.searchParams.get('limit') ?? 20);
+      const trades = await memo(`history:${address}:${limit}`, 120_000, () => predictHistory(address, { limit }));
       let hits: Hit[] = trades.map((trade) => ({ blobId: trade.fillDigest, memory: trade }));
       // With Walrus Memory configured, the ghost is built from what it recalls there; the trade list stays the chain's.
       let source = 'on-chain history, not yet in Walrus memory';
@@ -331,7 +348,7 @@ const server = createServer(async (req, res) => {
       let memoryError: string | null = null;
       if (process.env.MEMWAL_MAINNET_KEY && process.env.MEMWAL_MAINNET_ACCOUNT_ID) {
         try {
-          const recalled = await memoryFor(address).recall(context(1, 0, 0));
+          const recalled = await memo(`recall:${address}`, 60_000, () => memoryFor(address).recall(context(1, 0, 0)));
           if (recalled.length) {
             hits = recalled;
             blobIds = recalled.map((h) => h.blobId);
