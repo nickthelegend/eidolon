@@ -130,6 +130,7 @@ input {
   gap: 12px;
 }
 .mode {
+  white-space: nowrap;
   font: 500 12px var(--mono);
   padding: 6px 10px;
   border-radius: 999px;
@@ -143,8 +144,39 @@ input {
 
 /* hero */
 .hero {
-  padding: 40px 0 28px;
-  max-width: 760px;
+  position: relative;
+  margin-top: 16px;
+  padding: 72px 40px 64px;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.hero-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 70% 50%;
+  z-index: 0;
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(11, 12, 14, 0.92) 0%, rgba(11, 12, 14, 0.6) 45%, rgba(11, 12, 14, 0) 75%);
+  z-index: 1;
+}
+.hero h1,
+.hero p {
+  position: relative;
+  z-index: 2;
+  max-width: 600px;
 }
 .hero h1 {
   margin: 0 0 12px;
@@ -258,6 +290,19 @@ input {
 .empty b {
   display: block;
   margin-bottom: 4px;
+}
+.empty-art {
+  display: block;
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  margin-bottom: 10px;
+  animation: drift 6s ease-in-out infinite;
+}
+@keyframes drift {
+  50% {
+    transform: translateY(-4px);
+  }
 }
 .empty p {
   margin: 0;
@@ -720,8 +765,23 @@ button.primary.ember {
   .shell {
     padding: 14px 16px 40px;
   }
+  .brand em,
+  .mode {
+    display: none;
+  }
+  .side {
+    font-size: 15px;
+    padding: 12px;
+  }
+  .side small {
+    display: none;
+  }
   .hero {
-    padding: 28px 0 20px;
+    padding: 40px 20px 36px;
+    min-height: 300px;
+  }
+  .hero::after {
+    background: linear-gradient(180deg, rgba(11, 12, 14, 0.3) 0%, rgba(11, 12, 14, 0.9) 70%);
   }
   .fields,
   .quote dl {
@@ -742,5 +802,8 @@ button.primary.ember {
 @media (prefers-reduced-motion: reduce) {
   .ring-fill {
     transition: none;
+  }
+  .empty-art {
+    animation: none;
   }
 }

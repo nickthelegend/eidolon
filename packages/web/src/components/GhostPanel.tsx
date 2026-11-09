@@ -14,6 +14,7 @@ export function GhostPanel({ status, round }: { status: Status | null; round: Ro
 
       {memoryMissing ? (
         <div className="empty">
+          <img className="empty-art" src="/art/eidolon-empty-ghost.webp" alt="" width={96} height={96} />
           <b>Setup required: Walrus Memory</b>
           <p>
             The ghost is built only from your recalled trades. Without a Walrus Memory account
@@ -22,6 +23,7 @@ export function GhostPanel({ status, round }: { status: Status | null; round: Ro
         </div>
       ) : !ghost ? (
         <div className="empty">
+          <img className="empty-art" src="/art/eidolon-empty-ghost.webp" alt="" width={96} height={96} />
           <b>No memories of you yet</b>
           <p>
             Your first settled round becomes the ghost’s first memory on Walrus mainnet. From the second

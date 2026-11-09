@@ -31,3 +31,7 @@ The CLI provides `pnpm --filter @eidolon/cli exec eidolon status`, `markets`, an
 Mainnet gRPC reads and a real enqueue simulation pass with the public development endpoint. Tatum, Walrus, wallet signing, a real mint, ghost execution, and payout event reconciliation have not been exercised here because their credentials and funded wallets were not supplied. See [TESTING.md](TESTING.md) and [BLOCKED.md](BLOCKED.md).
 
 Protocol and SDK references: [DeepBook Predict](https://www.docs.sui.io/onchain-finance/deepbook/deepbook-predict), [Positions SDK](https://www.docs.sui.io/onchain-finance/deepbook/deepbook-predict-sdk/positions), [Sui RPC migration](https://docs.sui.io/references/sui-api), and [dApp Kit React](https://sdk.mystenlabs.com/dapp-kit/getting-started/react).
+
+## Art
+
+Art generated with ChatGPT (image generation), directed in [docs/ART.md](docs/ART.md); source PNGs stay out of git and the web app ships WebP copies in `packages/web/public/art/`.

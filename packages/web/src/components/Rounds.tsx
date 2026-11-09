@@ -10,6 +10,7 @@ export function Rounds({ rounds }: { rounds: Round[] }) {
       </header>
       {rounds.length === 0 ? (
         <div className="empty">
+          <img className="empty-art" src="/art/eidolon-empty-arena.webp" alt="" width={96} height={96} />
           <b>No rounds yet</b>
           <p>Every round you queue shows here with its SuiScan order, the ghost’s order and the payout proof.</p>
         </div>
@@ -77,6 +78,7 @@ export function Leaderboard() {
       </header>
       {!rows || rows.length === 0 ? (
         <div className="empty">
+          <img className="empty-art" src="/art/eidolon-trophy.webp" alt="" width={96} height={96} />
           <b>No verified players yet</b>
           <p>A player appears after their first round settles and both payouts are proven on Sui.</p>
         </div>

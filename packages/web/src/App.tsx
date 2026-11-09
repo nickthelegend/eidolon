@@ -121,6 +121,13 @@ export function App() {
       </header>
 
       <section className="hero">
+        <img
+          className="hero-art"
+          src="/art/eidolon-hero.webp"
+          alt="A trader lit in ember faces a translucent pale-green double of themselves across a glowing price line in a storm"
+          width={1536}
+          height={1024}
+        />
         <h1>
           Trade against <span className="spectral">your past self.</span>
         </h1>
@@ -175,7 +182,7 @@ export function App() {
                 <span>
                   <b>BTC · {m.cadence} min</b>
                   <small className="num">
-                    expires {new Date(m.expiryMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    expires {new Date(m.expiryMs).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     {m.mintPaused ? ' · paused' : ''}
                   </small>
                 </span>
