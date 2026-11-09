@@ -29,11 +29,13 @@ export function createDemoSigner(
     res.end(JSON.stringify({ demo: true, ...value }));
   };
   return async function handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
-    if (req.url === '/demo-signer' && req.method === 'GET') {
+    if (req.url === '/demo-signer') {
+      if (req.method !== 'GET') { json(res, 405, { error: 'GET required' }); return true; }
       json(res, 200, { enabled, accounts: accounts.map(({ label, address }) => ({ label, address })) });
       return true;
     }
-    if (req.url !== '/demo-signer/sign' || req.method !== 'POST') return false;
+    if (req.url !== '/demo-signer/sign') return false;
+    if (req.method !== 'POST') { json(res, 405, { error: 'POST required' }); return true; }
     try {
       if (!enabled) throw Error('Demo signer disabled');
       let raw = '';
