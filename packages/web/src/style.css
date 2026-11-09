@@ -112,7 +112,13 @@ mysten-dapp-kit-connect-button::part(trigger):hover { background: #ff8b55; trans
 .layout { max-width: 1360px; margin: 0 auto; padding: 28px 32px 40px; display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 28px; align-items: start; }
 .main-col { display: grid; gap: 22px; min-width: 0; }
 .rail { display: grid; gap: 16px; position: sticky; top: 92px; }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+/* A soft spotlight that follows the pointer across a card (set by main.tsx). */
+.card::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity 0.4s; background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 0%), rgba(255, 255, 255, 0.045), transparent 60%); }
+.card:hover::after { opacity: 1; }
+.intro h1, .intro .lede, .intro .stats, .chart-card, .rail > * { animation: rise 0.8s var(--ease) both; }
+.intro .lede { animation-delay: 0.08s; } .intro .stats { animation-delay: 0.16s; } .chart-card { animation-delay: 0.22s; }
+.rail > :nth-child(1) { animation-delay: 0.12s; } .rail > :nth-child(2) { animation-delay: 0.24s; } .rail > :nth-child(3) { animation-delay: 0.32s; }
 
 /* Intro: one plain sentence with live numbers */
 .intro { position: relative; padding: 10px 0 6px; isolation: isolate; }
