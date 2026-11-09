@@ -609,6 +609,23 @@ const server = createServer(async (req, res) => {
       void watch(round);
       return;
     }
+    if (url.pathname === '/haunt' && req.method === 'POST') {
+      const input = await body(req);
+      const player = String(input.player ?? '').toLowerCase();
+      if (!/^0x[0-9a-f]{64}$/.test(player)) throw new Error('Invalid player address');
+      const cadence = input.cadence === 1 ? 1 : 5;
+      haunts = haunts.filter((h) => h.player !== player);
+      if (input.on !== false) haunts.push({ player, cadence, since: new Date().toISOString() });
+      await saveHaunts();
+      void hauntTick();
+      respond(res, 200, ghostFeed(player));
+      return;
+    }
+    if (url.pathname === '/ghost-feed') {
+      const player = (url.searchParams.get('player') ?? '').toLowerCase();
+      respond(res, 200, ghostFeed(player || null));
+      return;
+    }
     respond(res, 404, { error: 'Not found' });
   } catch (error) {
     respond(res, 400, { error: explainAbort(error) ?? safeError(error) });
@@ -986,6 +1003,294 @@ async function watch(round: Round) {
     await save();
   }
 }
+
+// ---------------------------------------------------------------------------
+// Haunt mode: the ghost trades on its own. Every cycle, for each player who turned it on, it recalls that
+// player's memories from Walrus, predicts the side the player would take, takes the other side at a strike
+// Predict will price, sizes the bet from the player's habits, quotes and dry-runs it, and places it from the
+// ghost's own wallet when live writes are on. Each step is logged as a tool call the app shows as it happens.
+type Side = 'up' | 'down';
+type GhostStep = { at: string; tool: string; detail: string; ok: boolean };
+type GhostTrade = {
+  id: string;
+  player: string;
+  marketId: string;
+  expiryMs: number;
+  cadence: 1 | 5;
+  playerSide: Side;
+  side: Side;
+  strike?: number;
+  exact?: boolean;
+  probability?: number;
+  size: number;
+  profile: { upBias: number; hitRate: number; recalled: number };
+  blobIds: string[];
+  live: boolean;
+  status: string;
+  steps: GhostStep[];
+  leg?: Leg;
+  settlement?: number;
+  won?: boolean;
+  createdAt: string;
+};
+type Haunt = { player: string; cadence: 1 | 5; since: string };
+const hauntsPath = `${dataDir}/haunts.json`;
+const ghostTradesPath = `${dataDir}/ghost-trades.json`;
+let haunts: Haunt[] = [];
+let ghostTrades: GhostTrade[] = [];
+try {
+  haunts = JSON.parse(await readFile(hauntsPath, 'utf8'));
+} catch {
+  /* none yet */
+}
+try {
+  ghostTrades = JSON.parse(await readFile(ghostTradesPath, 'utf8'));
+} catch {
+  /* none yet */
+}
+for (const player of (process.env.EIDOLON_HAUNT ?? '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean))
+  if (/^0x[0-9a-f]{64}$/.test(player) && !haunts.some((h) => h.player === player))
+    haunts.push({ player, cadence: 5, since: new Date().toISOString() });
+async function saveHaunts() {
+  await mkdir(dataDir, { recursive: true });
+  await writeFile(hauntsPath, JSON.stringify(haunts, null, 2));
+}
+async function saveGhostTrades() {
+  await mkdir(dataDir, { recursive: true });
+  await writeFile(ghostTradesPath, JSON.stringify(ghostTrades.slice(-500), null, 2));
+}
+function ghostAddress() {
+  try {
+    return process.env.EIDOLON_GHOST_KEY ? Ed25519Keypair.fromSecretKey(process.env.EIDOLON_GHOST_KEY).toSuiAddress() : null;
+  } catch {
+    return null;
+  }
+}
+function ghostFeed(player: string | null) {
+  const mine = ghostTrades.filter((t) => !player || t.player === player);
+  const done = mine.filter((t) => t.won != null);
+  return {
+    ghost: ghostAddress(),
+    mode: writesOn() ? 'live' : 'dry-run',
+    haunting: player ? haunts.find((h) => h.player === player) ?? null : null,
+    haunts: haunts.length,
+    stats: {
+      cycles: mine.length,
+      placed: mine.filter((t) => t.leg).length,
+      settled: done.length,
+      wins: done.filter((t) => t.won).length,
+      pnl: mine.reduce((n, t) => n + (t.leg?.pnl ?? 0), 0),
+    },
+    trades: [...mine].reverse().slice(0, 25),
+  };
+}
+function step(t: GhostTrade, tool: string, detail: string, ok = true) {
+  t.steps.push({ at: new Date().toISOString(), tool, detail, ok });
+  broadcast({ type: 'ghost', trade: t });
+}
+const pctLabel = (p: number) => `${Math.round(p * 100)}%`;
+let haunting = false;
+async function hauntTick() {
+  if (haunting || haunts.length === 0) return;
+  haunting = true;
+  try {
+    const list = await marketList();
+    for (const h of haunts) {
+      const now = Date.now();
+      const market = list
+        .filter((m) => m.cadence === h.cadence && m.expiryMs - now > 45_000 && m.expiryMs - now < h.cadence * 60_000 + 90_000)
+        .filter((m) => !ghostTrades.some((t) => t.player === h.player && t.marketId === m.id))
+        .sort((a, b) => a.expiryMs - b.expiryMs)[0];
+      if (!market || market.forward == null) continue;
+      await haunt(h, market).catch((e) => console.error('haunt', h.player, safeError(e)));
+    }
+  } finally {
+    haunting = false;
+  }
+}
+async function haunt(h: Haunt, m: Awaited<ReturnType<typeof marketList>>[number]) {
+  const t: GhostTrade = {
+    id: `${h.player.slice(2, 10)}-${m.expiryMs}`,
+    player: h.player,
+    marketId: m.id,
+    expiryMs: m.expiryMs,
+    cadence: m.cadence,
+    playerSide: 'up',
+    side: 'down',
+    size: 0,
+    profile: { upBias: 0, hitRate: 0, recalled: 0 },
+    blobIds: [],
+    live: false,
+    status: 'thinking',
+    steps: [],
+    createdAt: new Date().toISOString(),
+  };
+  ghostTrades.push(t);
+  if (!process.env.MEMWAL_MAINNET_KEY || !process.env.MEMWAL_MAINNET_ACCOUNT_ID) {
+    step(t, 'recall_memories', 'Setup required: MEMWAL_MAINNET_ACCOUNT_ID and MEMWAL_MAINNET_KEY', false);
+    t.status = 'Setup required: Walrus Memory';
+    return saveGhostTrades();
+  }
+  const hits = await memo(`recall:${h.player}`, 60_000, () => memoryFor(h.player).recall(context(1, 0, 0)));
+  const rounds_ = hits.filter((x) => x.memory.kind === 'round');
+  t.blobIds = rounds_.map((x) => x.blobId);
+  if (!rounds_.length) {
+    step(t, 'recall_memories', 'No trade memories on Walrus for this player yet', false);
+    t.status = 'no memories: nothing to haunt with';
+    return saveGhostTrades();
+  }
+  step(t, 'recall_memories', `Recalled ${rounds_.length} trade memories from Walrus mainnet`);
+  const profile = habitProfile(hits);
+  t.profile = { upBias: profile.upBias, hitRate: profile.hitRate, recalled: profile.recalled };
+  step(t, 'read_habits', `Bets UP ${pctLabel(profile.upBias)} of the time, hits ${pctLabel(profile.hitRate)}`);
+  t.playerSide = profile.upBias >= 0.5 ? 'up' : 'down';
+  t.side = t.playerSide === 'up' ? 'down' : 'up';
+  step(
+    t,
+    'predict_player',
+    `You'd most likely bet ${t.playerSide.toUpperCase()} on this ${m.cadence}-minute market (${pctLabel(t.playerSide === 'up' ? profile.upBias : 1 - profile.upBias)} of your bets), so the ghost goes ${t.side.toUpperCase()}`,
+  );
+  const c = chain();
+  const pricer = await c.predict.read.pricer({ underlying: 'BTC', expiryMs: m.expiryMs });
+  const playerStrike = (t.playerSide === 'up' ? m.suggestedStrike : m.suggestedStrikeDown) ?? m.forward!;
+  const pick = ghostStrike(pricer, t.side, playerStrike, m.admissionTickSize);
+  if (!pick) {
+    step(t, 'pick_strike', 'No opposite-side strike inside Predict’s 15–50% entry band right now', false);
+    t.status = 'no admissible strike';
+    return saveGhostTrades();
+  }
+  t.strike = pick.strike;
+  t.exact = pick.exact;
+  t.probability = pick.probability;
+  step(t, 'pick_strike', `${t.side.toUpperCase()} at $${pick.strike.toLocaleString('en-US')} (${pctLabel(pick.probability)} odds; you'd stand at $${playerStrike.toLocaleString('en-US')})`);
+  const decision = ghostDecision(t.playerSide, hits, context(m.cadence, playerStrike, m.forward!), Number(process.env.EIDOLON_GHOST_MAX_USDC ?? 5));
+  t.size = decision.size;
+  step(t, 'size_bet', `${decision.size.toFixed(2)} USDC${profile.hitRate < 0.5 ? ', sized up because you lose more than you win' : ', your own average size'}`);
+  const owner = ghostAddress();
+  if (!owner) {
+    step(t, 'quote', 'Setup required: EIDOLON_GHOST_KEY (the ghost’s own wallet)', false);
+    t.status = 'Setup required: EIDOLON_GHOST_KEY';
+    return saveGhostTrades();
+  }
+  let planned: Awaited<ReturnType<typeof plan>>;
+  try {
+    planned = await plan(owner, m, t.side, decision.size, pick.strike);
+  } catch (e) {
+    step(t, 'quote', explainAbort(e) ?? safeError(e), false);
+    t.status = 'quote failed';
+    return saveGhostTrades();
+  }
+  const { descriptor, quote } = planned;
+  if (!quote.accepting) {
+    const why: Record<string, string> = {
+      fee: 'the ghost’s Predict account has no USDC to cover this bet yet (it needs funding)',
+      'entry-band': 'the strike moved outside the 15–50% entry band',
+    };
+    step(t, 'quote', `Predict refuses: ${why[String(quote.refusal)] ?? quote.refusal}`, false);
+    t.status = `refused: ${quote.refusal}`;
+    return saveGhostTrades();
+  }
+  step(t, 'quote', `Predict accepts: pays ${quote.potentialPayout.toFixed(2)} USDC if right, costs ${quote.totalDebit.toFixed(2)} USDC`);
+  let bytes: Uint8Array;
+  try {
+    const { transaction } = await c.predict.tx.enqueuePlan(owner, descriptor, quote);
+    transaction.setSender(owner);
+    bytes = await transaction.build({ client: c.client });
+  } catch (e) {
+    step(t, 'dry_run', explainAbort(e) ?? safeError(e), false);
+    t.status = 'dry-run failed';
+    return saveGhostTrades();
+  }
+  const dry = await c.client.core.simulateTransaction({ transaction: bytes, include: { effects: true, events: true } });
+  if (dry.$kind !== 'Transaction') {
+    const why = explainAbort(dry.FailedTransaction.status.error) ?? dry.FailedTransaction.status.error?.message ?? 'unknown';
+    step(t, 'dry_run', `Failed on ${c.rpc}: ${why}`, false);
+    t.status = 'dry-run failed';
+    return saveGhostTrades();
+  }
+  step(t, 'dry_run', `Success on ${c.rpc}`);
+  if (!writesOn()) {
+    step(t, 'place_order', 'Not sent: this server is dry-run only (real orders are off)', false);
+    t.status = 'dry-run only';
+    return saveGhostTrades();
+  }
+  const maxDaily = Number(process.env.EIDOLON_GHOST_DAILY_USDC ?? 10);
+  const today = new Date().toISOString().slice(0, 10);
+  const spent =
+    ghostTrades.filter((x) => x.leg && x.createdAt.slice(0, 10) === today).reduce((n, x) => n + x.size, 0) +
+    rounds.filter((r) => r.ghost?.leg && r.createdAt.slice(0, 10) === today).reduce((n, r) => n + (r.ghost?.size ?? 0), 0);
+  if (spent + decision.size > maxDaily) {
+    step(t, 'place_order', `Daily cap reached: ${spent.toFixed(2)} of ${maxDaily} USDC spent today`, false);
+    t.status = 'daily cap reached';
+    return saveGhostTrades();
+  }
+  const keypair = Ed25519Keypair.fromSecretKey(process.env.EIDOLON_GHOST_KEY!);
+  const signature = await keypair.signTransaction(bytes);
+  const sent = await c.client.core.executeTransaction({ transaction: bytes, signatures: [signature.signature], include: { events: true, effects: true } });
+  if (sent.$kind !== 'Transaction' || !sent.Transaction.effects.status.success) {
+    step(t, 'place_order', 'Onchain enqueue failed', false);
+    t.status = 'enqueue failed';
+    return saveGhostTrades();
+  }
+  const receipt = c.predict.decode.enqueue(sent.Transaction);
+  t.live = true;
+  t.leg = { digest: sent.Transaction.digest, recordId: String(receipt.recordId), orderId: '', cost: 0, premium: 0 };
+  step(t, 'place_order', `Order queued on Sui mainnet: ${sent.Transaction.digest}`);
+  t.status = 'queued';
+  await saveGhostTrades();
+  void settleGhost(t);
+}
+async function settleGhost(t: GhostTrade) {
+  try {
+    const c = chain();
+    while (Date.now() < t.expiryMs + 20_000) await new Promise((r) => setTimeout(r, Math.min(20_000, t.expiryMs + 20_000 - Date.now())));
+    const coords = { underlying: 'BTC', expiryMs: t.expiryMs, marketId: t.marketId };
+    if (t.leg && !t.leg.orderId) {
+      const outcome = await c.predict.read.waitForOutcome(coords, BigInt(t.leg.recordId));
+      if (outcome.outcome === 'refunded') {
+        step(t, 'settle', 'Predict refunded the queued order', false);
+        t.leg = undefined;
+        t.status = 'refunded';
+        return saveGhostTrades();
+      }
+      const leg = await filledLeg(c, t.leg.digest, t.marketId, t.leg.recordId, Date.parse(t.createdAt) - 5000);
+      if (leg) {
+        t.leg = leg;
+        step(t, 'fill', `Filled: ${leg.fillDigest}`);
+      }
+    }
+    for (let i = 0; i < 40; i++) {
+      const s = await c.predict.read.settlement(coords);
+      if (s.settled && s.settlementPrice != null && t.strike != null) {
+        t.settlement = s.settlementPrice;
+        t.won = t.side === 'up' ? s.settlementPrice > t.strike : s.settlementPrice < t.strike;
+        if (t.leg?.orderId && (await paidLeg(c, t.leg, t.marketId, t.expiryMs).catch(() => false))) {
+          step(t, 'settle', `Pyth settled BTC at $${s.settlementPrice.toLocaleString('en-US')}; ghost ${t.won ? 'won' : 'lost'} ${(t.leg.pnl ?? 0).toFixed(2)} USDC (payout ${t.leg.payoutDigest})`);
+        } else {
+          step(t, 'settle', `Pyth settled BTC at $${s.settlementPrice.toLocaleString('en-US')}; the ghost's ${t.side.toUpperCase()} at $${t.strike.toLocaleString('en-US')} ${t.won ? 'would have won' : 'would have lost'}${t.live ? '' : ' (dry-run, not placed)'}`);
+        }
+        t.status = t.won ? (t.live ? 'won' : 'would have won') : t.live ? 'lost' : 'would have lost';
+        return saveGhostTrades();
+      }
+      await new Promise((r) => setTimeout(r, 10_000));
+    }
+    t.status = 'settlement pending';
+    await saveGhostTrades();
+  } catch (e) {
+    step(t, 'settle', `Settlement check failed: ${safeError(e)}`, false);
+    await saveGhostTrades();
+  }
+}
+// Dry-runs settle too, so the feed shows how the ghost's call would have turned out.
+for (const t of ghostTrades.filter((x) => x.won == null && x.live)) void settleGhost(t);
+const settleQueued = new Set<string>();
+setInterval(() => {
+  void hauntTick();
+  for (const t of ghostTrades.filter((x) => x.won == null && x.strike != null && !x.live && !settleQueued.has(x.id))) {
+    settleQueued.add(t.id);
+    void settleGhost(t);
+  }
+}, 15_000).unref();
 for (const round of rounds.filter((r) => r.status !== 'settled' && r.status !== 'player refunded'))
   void watch(round);
 server.listen(Number(process.env.EIDOLON_PORT ?? 8787), () =>
