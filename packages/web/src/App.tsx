@@ -22,6 +22,7 @@ import {
   type Status,
 } from './api';
 import { Countdown } from './components/Countdown';
+import { Logo, Mark } from './components/Logo';
 import { GhostPanel } from './components/GhostPanel';
 import { HistoryPanel } from './components/HistoryPanel';
 import { LiveChart } from './components/LiveChart';
@@ -243,17 +244,24 @@ export function App() {
       </div>
 
       <header className="nav">
-        <a className="brand" href="/" aria-label="Eidolon home">
-          <img src="/art/v2/eidolon2-mark.webp" alt="" width={30} height={30} />
-          <span>EIDOLON</span>
-        </a>
+        <Logo />
         <nav className="nav-links" aria-label="Sections">
           <a href="#trade" className="on">Trade</a>
           <a href="#ghost">Ghost</a>
           <a href="#tabs" onClick={() => setTab('history')}>History</a>
           <a href="#tabs" onClick={() => setTab('board')}>Board</a>
         </nav>
-        {!account && (
+        {readOnly ? (
+          <div className="search search-chip" role="status">
+            <img className="avatar" src={avatarFor(owner!)} alt="" width={22} height={22} />
+            <span>
+              Viewing <b className="num">{short(owner!)}</b> <span className="muted">· read-only</span>
+            </span>
+            <button className="chip-x" aria-label="Stop viewing this address" onClick={clearViewAddress}>
+              ✕
+            </button>
+          </div>
+        ) : !account && (
           <form
             className="search"
             role="search"
@@ -285,19 +293,8 @@ export function App() {
         <ConnectButton />
       </header>
 
-      {(status?.setup.length || status?.chainError || readOnly || (error && errorAt !== 'plan')) && (
+      {(status?.setup.length || status?.chainError || (error && errorAt !== 'plan')) && (
         <div className="notices">
-          {readOnly && (
-            <div className="notice notice-view" role="status">
-              <img className="avatar" src={avatarFor(owner!)} alt="" width={22} height={22} />
-              <span>
-                Viewing <b className="num">{short(owner!)}</b> · read-only, not your wallet
-              </span>
-              <button className="link-btn" onClick={clearViewAddress}>
-                Stop viewing
-              </button>
-            </div>
-          )}
           {status && status.setup.length > 0 && (
             <div className="notice notice-setup" role="status">
               <b>Setup required</b>
@@ -320,6 +317,7 @@ export function App() {
         <div className="main-col">
           <section className="intro" aria-labelledby="headline">
             <h1 id="headline">
+              <span className="line">
               {move ? (
                 <>
                   BTC is <span className={move.delta >= 0 ? 'up' : 'down'}>{move.delta >= 0 ? 'up' : 'down'} {usd(Math.abs(move.delta))}</span> in{' '}
@@ -328,6 +326,8 @@ export function App() {
               ) : (
                 <>BTC is {forward != null ? <span className="ember">{usd(forward)}</span> : '…'}. </>
               )}
+              </span>
+              <span className="line">
               {decision ? (
                 <>
                   Your ghost bets <span className="spectral">{decision.side === 'up' ? 'it rises' : 'it falls'}</span>.
@@ -337,6 +337,7 @@ export function App() {
                   Can you beat <span className="spectral">your ghost?</span>
                 </>
               )}
+              </span>
             </h1>
             <p className="lede">
               Call where BTC ends in 1 or 5 minutes on DeepBook Predict. Your ghost is built from your own past trades,
@@ -474,7 +475,6 @@ export function App() {
                     reset();
                   }}
                 >
-                  <img src={`/art/v2/eidolon2-hourglass-${m.cadence}m.webp`} alt="" width={18} height={18} />
                   <span>{m.cadence} min</span>
                   <small className="num">{m.mintPaused ? 'paused' : clockText(m.expiryMs - now)}</small>
                 </button>
@@ -496,7 +496,7 @@ export function App() {
                     }}
                   >
                     <span className="side-name">{s === 'up' ? '↑ Higher' : '↓ Lower'}</span>
-                    <small className="num">{hint != null ? `ends ${s === 'up' ? 'above' : 'below'} ${usd(hint)}` : s === 'up' ? 'ends above' : 'ends below'}</small>
+                    <small>{hint != null ? `ends ${s === 'up' ? 'above' : 'below'} ${usd(hint)}` : s === 'up' ? 'ends above' : 'ends below'}</small>
                   </button>
                 );
               })}
@@ -580,7 +580,7 @@ export function App() {
       </main>
 
       <footer className="foot">
-        <img src="/art/v2/eidolon2-mark.webp" alt="" width={22} height={22} />
+        <Mark size={20} />
         <p>
           Markets and settlement: DeepBook Predict, settled at the Pyth price at expiry. Memory: Walrus Memory mainnet.
           Chain reads: {status?.rpc ?? 'loading'}. Every number comes from the chain or from recalled memories. Art generated with ChatGPT.

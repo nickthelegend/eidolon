@@ -54,10 +54,11 @@ code { font: 500 12px var(--mono); background: var(--surface-3); padding: 2px 6p
 .shell { min-height: 100vh; }
 
 /* Ticker */
-.ticker { height: 28px; overflow: hidden; border-bottom: 1px solid var(--line); background: #000; }
+.ticker { height: 26px; overflow: hidden; border-bottom: 1px solid var(--line); background: #000; }
 .ticker-run { display: flex; gap: 48px; width: max-content; height: 100%; align-items: center; animation: ticker 60s linear infinite; }
 .ticker-run span { font: 500 11px var(--mono); letter-spacing: 0.08em; color: var(--muted); white-space: nowrap; }
-.ticker-run span:nth-child(5n + 1) { color: var(--ink-2); }
+.ticker-run span { color: var(--faint); }
+.ticker-run span:nth-child(5n + 1) { color: var(--muted); }
 .ticker-run em { font-style: normal; }
 @keyframes ticker { to { transform: translateX(-50%); } }
 
@@ -72,8 +73,8 @@ code { font: 500 12px var(--mono); background: var(--surface-3); padding: 2px 6p
   border-bottom: 1px solid var(--line);
 }
 .brand { min-height: 44px; display: flex; align-items: center; gap: 10px; text-decoration: none; }
-.brand img { border-radius: 8px; }
-.brand span { font: 700 17px var(--display); letter-spacing: 0.16em; }
+.brand .mark { flex: none; }
+.wordmark { font: 700 17px/1 var(--display); letter-spacing: 0.2em; }
 .nav-links { display: flex; gap: 26px; margin-left: 12px; }
 .nav-links a { text-decoration: none; color: var(--muted); font-size: 14px; font-weight: 500; padding: 22px 0; border-bottom: 2px solid transparent; transition: color 0.2s; }
 .nav-links a:hover, .nav-links a.on { color: var(--ink); }
@@ -88,6 +89,11 @@ code { font: 500 12px var(--mono); background: var(--surface-3); padding: 2px 6p
 .search:focus-within { border-color: var(--line-2); }
 .search input { flex: 1; min-width: 0; background: none; border: 0; outline: none; font-size: 12.5px; color: var(--ink); }
 .search input::placeholder { color: var(--faint); font-family: var(--body); font-size: 13.5px; }
+.search-chip { gap: 10px; color: var(--ink-2); font-size: 13px; padding-right: 4px; }
+.search-chip > span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-chip .avatar { width: 22px; height: 22px; }
+.chip-x { width: 32px; height: 32px; flex: none; border: 0; border-radius: 50%; background: var(--surface-3); color: var(--muted); font-size: 12px; }
+.chip-x:hover { color: var(--ink); }
 .search kbd { font: 500 11px var(--mono); color: var(--faint); border: 1px solid var(--line-2); border-radius: 6px; padding: 1px 6px; }
 .mode { display: inline-flex; align-items: center; gap: 8px; font: 500 12px var(--mono); color: var(--muted); white-space: nowrap; }
 .nav-links + .mode { margin-left: auto; }
@@ -114,17 +120,19 @@ mysten-dapp-kit-connect-button::part(trigger):hover { background: #ff8b55; trans
 .rail { display: grid; gap: 16px; position: sticky; top: 92px; }
 .card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .intro h1, .intro .lede, .intro .stats, .chart-card, .rail > * { animation: rise 0.8s var(--ease) both; }
+.intro h1 .line { display: block; }
 .intro .lede { animation-delay: 0.08s; } .intro .stats { animation-delay: 0.16s; } .chart-card { animation-delay: 0.22s; }
 .rail > :nth-child(1) { animation-delay: 0.12s; } .rail > :nth-child(2) { animation-delay: 0.24s; } .rail > :nth-child(3) { animation-delay: 0.32s; }
 
 /* Intro: one plain sentence with live numbers */
 .intro { position: relative; padding: 10px 0 6px; isolation: isolate; }
 .layout, .main-col { overflow-x: clip; }
-.intro h1 { margin: 0; max-width: 620px; font: 700 clamp(32px, 4.2vw, 52px)/1.08 var(--display); letter-spacing: -0.035em; text-wrap: balance; }
+.intro h1 { margin: 0; font: 700 clamp(30px, 3.6vw, 50px)/1.1 var(--display); letter-spacing: -0.035em; text-wrap: balance; }
+.intro h1 .line { display: block; }
 .intro .lede { margin: 16px 0 0; max-width: 520px; color: var(--ink-2); font-size: 15.5px; line-height: 1.55; }
 .stats { display: flex; gap: 48px; margin: 26px 0 0; }
 .stats div { display: flex; flex-direction: column-reverse; gap: 2px; }
-.stats dd { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.03em; }
+.stats dd { margin: 0; font: 700 26px/1.2 var(--display); letter-spacing: -0.03em; }
 .stats dt { color: var(--muted); font-size: 12px; }
 
 /* Chart card */
@@ -272,8 +280,7 @@ mysten-dapp-kit-connect-button::part(trigger):hover { background: #ff8b55; trans
 .bet-card { padding: 20px; }
 .bet-card h2, .ghost-card h2 { margin: 0 0 14px; font: 700 18px var(--display); letter-spacing: -0.02em; }
 .markets { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); }
-.markets button img { width: 18px; height: 18px; align-self: center; }
-.markets button { display: flex; align-items: baseline; justify-content: center; gap: 8px; height: 42px; border: 0; border-radius: 10px; background: none; color: var(--muted); font: 600 14px var(--display); cursor: pointer; transition: background 0.25s var(--ease), color 0.25s; }
+.markets button { display: flex; align-items: center; justify-content: center; gap: 8px; height: 42px; border: 0; border-radius: 10px; background: none; color: var(--muted); font: 600 14px var(--display); cursor: pointer; transition: background 0.25s var(--ease), color 0.25s; }
 .markets button small { font-size: 11.5px; font-weight: 500; }
 .markets button.on { background: var(--ember); color: #170900; }
 .markets button.on small { color: rgba(23, 9, 0, 0.7); }
@@ -285,7 +292,7 @@ mysten-dapp-kit-connect-button::part(trigger):hover { background: #ff8b55; trans
 .side:hover { transform: translateY(-2px); }
 .side:active { transform: scale(0.98); }
 .side-name { font: 700 17px var(--display); letter-spacing: -0.02em; }
-.side small { font-size: 11px; color: var(--muted); }
+.side small { font-size: 12px; color: var(--muted); }
 .side-up { background: rgba(52, 211, 153, 0.05); border: 1px solid rgba(52, 211, 153, 0.16); color: var(--up); }
 .side-down { background: rgba(255, 92, 122, 0.05); border: 1px solid rgba(255, 92, 122, 0.16); color: var(--down); }
 .side-up.on { background: rgba(52, 211, 153, 0.14); border-color: var(--up); box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.08); }
@@ -331,12 +338,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   border-color: rgba(217, 249, 157, 0.14);
 }
 .ghost-card.awake { border-color: rgba(217, 249, 157, 0.3); }
-.ghost-mask { position: absolute; right: 4px; top: 2px; width: 92px; height: 92px; object-fit: contain; pointer-events: none; animation: hover 6s ease-in-out infinite alternate, fade 0.6s both; filter: drop-shadow(0 10px 30px rgba(217, 249, 157, 0.18)); }
+.ghost-mask { position: absolute; right: 8px; top: 8px; width: 84px; height: 84px; object-fit: contain; pointer-events: none; animation: hover 6s ease-in-out infinite alternate, fade 0.6s both; filter: drop-shadow(0 10px 30px rgba(217, 249, 157, 0.18)); }
 @keyframes hover { from { transform: translateY(0) rotate(-3deg); } to { transform: translateY(-10px) rotate(3deg); } }
 @keyframes fade { from { opacity: 0; } }
 .kicker { margin: 0 0 2px; font: 500 11px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
-.ghost-kicker { color: var(--spectral); opacity: 0.8; padding-right: 90px; }
-.ghost-card h2 { padding-right: 90px; margin-bottom: 30px; }
+.ghost-card h2 { padding-right: 96px; margin-bottom: 4px; }
+.ghost-sub { margin: 0 0 24px; padding-right: 96px; color: var(--muted); font-size: 13px; }
 .ghost-line { position: relative; margin: 0 0 14px; font-size: 14px; line-height: 1.55; color: var(--ink-2); }
 .ghost-bet { display: flex; align-items: center; gap: 16px; padding: 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--line); }
 .ghost-bet span:not(.pill) { display: flex; flex-direction: column; }
@@ -407,7 +414,9 @@ a.chip:hover { background: rgba(217, 249, 157, 0.14); }
 }
 @media (max-width: 720px) {
   .nav { gap: 12px; padding: 0 16px; height: 60px; }
-  .search { display: none; }
+  .search:not(.search-chip) { display: none; }
+  .search-chip { order: 3; flex-basis: 100%; max-width: none; margin: 0 0 10px; }
+  .nav { flex-wrap: wrap; height: auto; min-height: 60px; }
   .brand span { font-size: 15px; letter-spacing: 0.12em; }
   .mode { display: none; }
   mysten-dapp-kit-connect-button { margin-left: auto; }

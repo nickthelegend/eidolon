@@ -26,10 +26,8 @@ export function GhostPanel({
   return (
     <section className={`card ghost-card ${awake ? 'awake' : ''}`} id="ghost" aria-labelledby="ghost-title">
       <img key={mood} className="ghost-mask" src={`/art/v2/eidolon2-ghost-${mood}.webp`} alt="" width={160} height={160} aria-hidden />
-      <p className="kicker ghost-kicker">
-        <span lang="grc">εἴδωλον</span> · always the other side
-      </p>
       <h2 id="ghost-title">Your ghost</h2>
+      <p className="ghost-sub">Built from your trades. Always takes the other side.</p>
 
       {status == null || (historyBusy && !chainGhost) ? (
         <div className="ghost-skel" aria-hidden>
