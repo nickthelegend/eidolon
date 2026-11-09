@@ -117,7 +117,38 @@ function memo<T>(key: string, ttlMs: number, run: () => Promise<T>): Promise<T> 
   value.catch(() => memoStore.delete(key));
   return value;
 }
-const marketsCached = () => memo('markets', 8_000, () => markets());
+// Stale-while-revalidate: answer from the last value (up to maxStaleMs old) and refresh in the background after freshMs.
+const swrStore = new Map<string, { at: number; value: Promise<unknown>; refreshing?: Promise<unknown> }>();
+function swr<T>(key: string, freshMs: number, maxStaleMs: number, run: () => Promise<T>): Promise<T> {
+  const hit = swrStore.get(key);
+  const age = hit ? Date.now() - hit.at : Infinity;
+  if (age > freshMs && !hit?.refreshing) {
+    const next = run();
+    if (hit) hit.refreshing = next;
+    else swrStore.set(key, { at: 0, value: next, refreshing: next });
+    next
+      .then(() => swrStore.set(key, { at: Date.now(), value: next }))
+      .catch(() => { const h = swrStore.get(key); if (h) h.refreshing = undefined; });
+  }
+  const now = swrStore.get(key)!;
+  return (now.at && Date.now() - now.at < maxStaleMs ? now.value : now.refreshing ?? now.value) as Promise<T>;
+}
+// Stale-while-revalidate for markets: answer with the last list (up to 60 s old) and refresh it in the background after 8 s.
+let marketsState: { at: number; value: ReturnType<typeof markets> } | null = null;
+let marketsRefresh: ReturnType<typeof markets> | null = null;
+function marketsCached(): ReturnType<typeof markets> {
+  const age = marketsState ? Date.now() - marketsState.at : Infinity;
+  if (age > 8_000 && !marketsRefresh) {
+    const next = markets();
+    marketsRefresh = next;
+    next
+      .then(() => { marketsState = { at: Date.now(), value: next }; })
+      .catch(() => {})
+      .finally(() => { marketsRefresh = null; });
+  }
+  if (marketsState && age < 60_000) return marketsState.value;
+  return marketsRefresh ?? marketsState!.value;
+}
 const executed = new Map<string, NonNullable<ReturnType<typeof prepared.get>>>();
 function broadcast(value: unknown) {
   for (const res of clients) res.write(`data: ${JSON.stringify(value)}\n\n`);
@@ -222,7 +253,7 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/status') {
       const forkInfo = fork ? await forkStatus(chain().client) : null;
       let rpc = forkInfo ? forkInfo.label : process.env.TATUM_API_KEY ? 'Tatum' : 'dev RPC (not Tatum)';
-      const { chainError, ghostBalance } = await memo('status-chain', 20_000, async () => {
+      const { chainError, ghostBalance } = await swr('status-chain', 20_000, 120_000, async () => {
         let chainError: string | null = null;
         try {
           await chain().predict.read.executionMode();
