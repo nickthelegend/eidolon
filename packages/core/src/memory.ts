@@ -27,11 +27,13 @@ export function memoryFor(player: string, env = process.env) {
     },
     // Many memories in one relayer bulk job: one signed request, certified in parallel.
     async rememberMany(memories: Memory[]): Promise<{ blobIds: string[]; failed: { index: number; error: string }[] }> {
-      const result = await client.rememberBulkAndWait(memories.map((m) => ({ text: encodeMemory(m) })), { timeoutMs: 900_000 });
-      return {
-        blobIds: result.results.filter((r) => r.status === 'done').map((r) => r.blob_id),
-        failed: result.results.flatMap((r, index) => (r.status === 'done' ? [] : [{ index, error: r.error ?? r.status }])),
-      };
+      const blobIds: string[] = [], failed: { index: number; error: string }[] = [];
+      for (let start = 0; start < memories.length; start += 20) { // the relayer caps a bulk request at 20 items
+        const chunk = memories.slice(start, start + 20);
+        const result = await client.rememberBulkAndWait(chunk.map((m) => ({ text: encodeMemory(m) })), { timeoutMs: 900_000 });
+        result.results.forEach((r, i) => (r.status === 'done' ? blobIds.push(r.blob_id) : failed.push({ index: start + i, error: r.error ?? r.status })));
+      }
+      return { blobIds, failed };
     },
     async remember(memory: Memory): Promise<string> {
       for (let attempt = 0; ; attempt++) {
