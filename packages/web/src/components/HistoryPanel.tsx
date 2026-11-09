@@ -74,6 +74,7 @@ export function HistoryPanel({ owner, marketId, side, readOnly, live, setup }: {
                 <p>Hit rate <span className="num">{pct(history.profile.hitRate)}</span></p>
                 <progress value={history.profile.hitRate} max={1} aria-label="Hit rate" />
                 <p>Average size <span className="num">{history.profile.averageSize.toFixed(2)} USDC</span></p>
+                <progress value={history.profile.averageSize} max={Math.max(...history.trades.map((trade) => trade.size))} aria-label="Average size relative to largest imported trade" />
               </div>
               <div>
                 {history.trades.map((trade) => (
