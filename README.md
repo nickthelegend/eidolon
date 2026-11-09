@@ -1,6 +1,69 @@
 # Eidolon
 
+**Bet whether Bitcoin goes up or down in the next minute, against a ghost of yourself.** The ghost studies how you trade (which side you pick, how much you bet, how often you win) and always takes the other side. If you beat it, you've beaten your own habits.
+
+Total Recall hackathon (Tatum × Walrus Memory), track 01 Markets & Sports Prediction. The market is DeepBook Predict on Sui mainnet. Chain data comes through Tatum's Sui gRPC gateway, and the ghost's memory is designed to live in Walrus Memory. **Walrus Memory writes on mainnet are PENDING** (see [Status](#status-what-is-live-today-vs-pending-keys)).
+
 Trade a live DeepBook Predict BTC market against a ghost built from your own Walrus Memory trade history. The first round has no ghost: there is no prior trade memory to recall. After a verified payout, Eidolon writes the round to Walrus; later rounds recall those blobs and compute an opposite bet and size from the recalled history. The LLM can narrate a decision but cannot change it.
+
+## Try it
+
+1. `pnpm install && pnpm build && pnpm dev`, then open http://localhost:5173. No keys are needed for this read-only path.
+2. Open `http://localhost:5173/?as=0x7c9250467b7d7cc0aa2a9e76d06e9e8af313afa22285f1a3c314d749617b486e`, a public mainnet Predict trader whose owner is unknown (more in [docs/DEMO-ADDRESSES.md](docs/DEMO-ADDRESSES.md)). The page is read-only: signing controls are hidden.
+3. **Your trading history** loads that address's settled Predict trades from mainnet. Each has its order, fill and payout digest.
+4. **Your ghost** shows the ghost built from that history: the share of UP bets and hit rate it read, the opposite side, its size and its counter-strike. It is labelled **Not on Walrus yet**, because no Walrus memory exists for it.
+5. Pick a live BTC market and a strike, then dry-run a bet. The quote, the 0.02 USDC fee and the expected payout come from Predict's on-chain pricer, and the simulation runs on mainnet without sending anything.
+6. To trade for real, set the keys in [BLOCKED.md](BLOCKED.md) and the steps in `MAINNET-RUNBOOK.md`. Without them the app says **Setup required** and never pretends.
+
+## Proof
+
+Only real evidence is listed. Eidolon deploys no contract of its own; it trades DeepBook Predict's mainnet packages.
+
+**Sui mainnet (reads and dry-runs, nothing signed or sent)**, from [TESTING.md](TESTING.md), Nov 9 2026:
+
+| What | Result | Path |
+| --- | --- | --- |
+| Active BTC markets and pool | 4 markets; pool 9,166.97 USDC at the sample read | public fullnode (dev RPC) |
+| Quote for a 2 USDC budget | 4.57 USDC payout, 0.02 USDC fee | public fullnode (dev RPC) |
+| Enqueue dry-run for funded address `0x4ed0d81b…e528` | Simulation succeeded, 3 events | public fullnode (dev RPC) |
+| History rebuild of `0x7c925046…486e` | 4 settled trades, each with enqueue, fill and payout digests, payouts checked against the settled market | public fullnode |
+| Example public fills read by Eidolon (other people's trades) | `GVwMyPLY8kFGz6oUmmTVmuA3b3VCgrXcpGLbNGPxmYVC`, `BqKVz6C7y8WNWAcRnRyUMAPfvtuYvvHb84vssqqAiduG`, `2v8k4Tnxvk36zCKysoyAdfn36EhZdDAPo4RexLKSdDtB` | public fullnode |
+| Tatum gateway `/status`, market list, `getTransaction` | Passed: `rpc: "Tatum"`, 4 markets, 3 events on a known fill | Tatum gRPC |
+| Tatum `SimulateTransaction` | HTTP 429 in bursts on the free plan; a 400 ms throttle with retry was added in `0ff816e`. A Tatum dry-run has not been re-recorded since | Tatum gRPC |
+| Tatum `ListEvents` | Refused by the gateway ("method not allowed"), so event scans use the public fullnode | public fullnode |
+| `POST /history/:address/remember` without keys | Refused: `Setup required: MEMWAL_MAINNET_KEY` | n/a |
+| Walrus Memory blobs on mainnet | **0. PENDING** on the Walrus Memory account ID and delegate key | n/a |
+
+**LOCAL FORK of Sui mainnet only (checkpoint 343353046, fork-only keys, no real funds).** These digests exist only on a local fork and are **not on Suiscan or mainnet**. Full table in [docs/FORK.md](docs/FORK.md).
+
+| Step on the fork | Fork-only digest |
+| --- | --- |
+| Player `/fund`: create a Predict account and deposit 3 USDC | `4yoWSWZAhDfaWG8K1EKgMbFoq7MLdMpvg19hu3ib5RKJ` |
+| Player `/plan` UP for 2 USDC (potential payout 4.64), then `/execute`; `/rounds` read it back | `J2tvgGYJPNoqDUEj8cR1aQAbZASHiA1UzUaKPT7ryTsY` |
+| Ghost wallet `/plan` DOWN for 2 USDC, then `/execute` | `7RobjWm2CKquJ8LRVWXS7w4vA6AF2GNi85MjAKqMgDMc` |
+
+The fork has no Predict keeper and a frozen clock, so it shows no fill, no settlement, no automatic ghost placement and no Walrus write.
+
+## Status: what is live today vs pending keys
+
+| Piece | Today |
+| --- | --- |
+| Live Predict markets, quotes, entry-band checks, mainnet dry-runs | **Live** (read-only) |
+| Settled-trade history for any address, with payout math checked | **Live** (read-only) |
+| History-built ghost (side, size, counter-strike), labelled "Not on Walrus yet" | **Live** (read-only) |
+| Reads through Tatum's Sui gRPC gateway | **Live** when `TATUM_API_KEY` is set. Event scans use the public fullnode because Tatum blocks `ListEvents` |
+| Wallet signing, `/execute`, round registration | Proven on a **local fork only**. No signed round on mainnet yet |
+| Walrus Memory writes and recall on mainnet | **PENDING**: 0 memories today; the event requires at least 10. Unblocked by `MEMWAL_MAINNET_ACCOUNT_ID` and `MEMWAL_MAINNET_KEY` |
+| Ghost recalled from Walrus and placed automatically | **PENDING**: needs Walrus keys, a funded ghost wallet and a player fill on mainnet |
+| Fill, settlement and payout reconciliation of an Eidolon round | **PENDING**: needs the first real mainnet round |
+
+After the mainnet run (keys in, one funded player round, then a second round with the ghost), this section will list the Walrus blob IDs and Suiscan links. Until then, nothing here claims a memory or a trade.
+
+Mainnet gRPC reads and a real enqueue simulation pass with the public development endpoint. The Tatum gRPC smoke check is recorded in [TESTING.md](TESTING.md). Walrus, wallet signing on mainnet, a real mint, ghost execution, and payout event reconciliation have not been exercised on mainnet.
+
+## Film
+
+`videos/eidolon/eidolon-film-v2.mp4` (not public yet; the link goes here once it's uploaded). It shows real mainnet reads and dry-runs of a public address, with nothing signed, and says so on screen.
 
 ## Run
 
@@ -46,12 +109,15 @@ The exact opposite side at the same strike can fail Predict's 0.15–0.5 entry b
 
 The CLI provides `pnpm --filter @eidolon/cli exec eidolon status`, `markets`, and `ghost <address>` after build. The ghost command reads Walrus recall; it does not use a local memory cache.
 
-## Current live status
-
-Mainnet gRPC reads and a real enqueue simulation pass with the public development endpoint. The Tatum gRPC smoke check is recorded in [TESTING.md](TESTING.md). Walrus, wallet signing, a real mint, ghost execution, and payout event reconciliation have not been exercised here.
-
 Protocol and SDK references: [DeepBook Predict](https://www.docs.sui.io/onchain-finance/deepbook/deepbook-predict), [Positions SDK](https://www.docs.sui.io/onchain-finance/deepbook/deepbook-predict-sdk/positions), [Sui RPC migration](https://docs.sui.io/references/sui-api), and [dApp Kit React](https://sdk.mystenlabs.com/dapp-kit/getting-started/react).
 
-## Art
+## AI and art disclosure
 
-Art generated with ChatGPT (image generation), directed in [docs/ART.md](docs/ART.md); source PNGs stay out of git and the web app ships WebP copies in `packages/web/public/art/`.
+- **Code and docs:** written with AI coding agents. Claude (Anthropic) wrote and reviewed code, UI and docs; Codex (OpenAI) wrote code. Nick (Nivesh Gajengi) directed the build.
+- **Art:** generated with ChatGPT (image generation), directed in [docs/ART.md](docs/ART.md); source PNGs stay out of git and the web app ships WebP copies in `packages/web/public/art/`. No real brands, people or other artists' work.
+- **Film voice:** synthetic narration made with Chatterbox text-to-speech. The screen footage is the app's real output; badges, captions and zooms were added on top, and no program output was edited.
+- **In the product:** an optional OpenRouter model (default `nvidia/nemotron-3-ultra-550b-a55b:free`) writes one taunt line from the ghost's recalled facts. It cannot change the ghost's side, size or strike; the deterministic policy decides those.
+
+## License
+
+MIT. Copyright (c) 2026 Nivesh Gajengi.
