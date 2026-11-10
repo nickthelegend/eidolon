@@ -1292,6 +1292,22 @@ async function haunt(h: Haunt, m: Awaited<ReturnType<typeof marketList>>[number]
     return saveGhostTrades();
   }
   const { descriptor, quote } = planned;
+  // Dry-run server and an unfunded ghost account: Predict can't price the ghost's own order, so ask Predict for the same
+  // bet (side, strike, size, market) on the trader's funded account. Read-only; it gives the real price the round would
+  // have had, so a settled dry-run round has a real would-have P&L. Nothing is sent.
+  if (!quote.accepting && String(quote.refusal) === 'fee' && !writesOn()) {
+    try {
+      const alt = await plan(t.player, m, t.side, t.size, pick.strike);
+      if (alt.quote.accepting) {
+        step(t, 'quote', `Predict prices it: pays ${alt.quote.potentialPayout.toFixed(2)} USDC if right, costs ${alt.quote.totalDebit.toFixed(2)} USDC (quoted on the trader's funded account; the ghost's own account has no USDC yet)`);
+        step(t, 'place_order', 'Not sent: this server is dry-run only (real orders are off)', false);
+        t.status = 'dry-run only';
+        return saveGhostTrades();
+      }
+    } catch {
+      /* fall through to the refusal below */
+    }
+  }
   if (!quote.accepting) {
     const why: Record<string, string> = {
       fee: 'the ghost’s Predict account has no USDC to cover this bet yet (it needs funding)',
