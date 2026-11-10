@@ -627,3 +627,17 @@ button.back { background: none; border: 0; padding: 0; font: inherit; font-weigh
 .toast-won { border-left: 4px solid #4ccf94; }
 .toast-lost { border-left: 4px solid #f07c7c; }
 .toast-think { border-left: 4px solid #b0a79f; }
+
+/* wins and losses */
+.wl-sum { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 26px; margin: 6px 8px 10px; padding: 12px 16px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--line); }
+.wl-sum > div { display: grid; gap: 2px; }
+.wl-sum b { font-size: 20px; font-weight: 700; }
+.wl-sum .wl-net b { font-size: 24px; }
+.wl-sum .form-note { flex-basis: 100%; }
+.wl { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.wl-won { background: var(--up); color: #fff; }
+.wl-lost { background: var(--down); color: #fff; }
+.wl-would.wl-won { background: var(--up-soft); color: var(--up); border: 1px dashed var(--up); }
+.wl-would.wl-lost { background: var(--down-soft); color: var(--down); border: 1px dashed var(--down); }
+.tbl td.pnl-cell { font-weight: 700; }
+.btc-only { color: var(--dim); }

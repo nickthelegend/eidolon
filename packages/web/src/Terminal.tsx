@@ -280,6 +280,7 @@ function OrderPanel(
         <div>
           <b>Bitcoin Up or Down · {market ? `${market.cadence} min` : '—'}</b>
           <small>Up wins above {usd(p.beat('up'))} · Down wins below {usd(p.beat('down'))}</small>
+          <small className="btc-only" data-film="btc-only">DeepBook Predict lists only BTC up/down markets today; other assets come when Predict adds them.</small>
         </div>
       </div>
       <div className="form-body">
@@ -647,6 +648,48 @@ function Resolved({ round }: { round: Round }) {
   );
 }
 
+/**
+ * A round's result from real numbers only. Settled and paid: the payout's P&L. Settled but not placed (dry-run): what it
+ * would have made at the price Predict quoted for it (pays X if right, costs Y). Otherwise no result yet.
+ */
+type Result = { won: boolean; pnl: number | null; real: boolean };
+export function ghostResult(t: GhostTrade): Result | null {
+  if (t.leg?.pnl != null) return { won: t.leg.pnl > 0, pnl: t.leg.pnl, real: true };
+  if (t.won == null) return null;
+  const q = t.steps.find((s) => s.tool === 'quote' && s.ok)?.detail.match(/pays ([\d.]+) USDC if right, costs ([\d.]+) USDC/);
+  const pnl = q ? Math.round((t.won ? Number(q[1]) - Number(q[2]) : -Number(q[2])) * 100) / 100 : null;
+  return { won: t.won, pnl, real: false };
+}
+function ResultPill({ r }: { r: Result | null }) {
+  if (!r) return <span className="dim small">open</span>;
+  return (
+    <span className={`wl ${r.won ? 'wl-won' : 'wl-lost'} ${r.real ? '' : 'wl-would'}`} title={r.real ? 'Settled and paid on chain' : 'Not placed: priced by Predict and settled at the Pyth price'}>
+      {r.real ? (r.won ? 'Won' : 'Lost') : r.won ? 'Would have won' : 'Would have lost'}
+    </span>
+  );
+}
+const signed = (n: number | null) => (n == null ? '—' : `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)}`);
+function Summary({ results, label }: { results: (Result | null)[]; label: string }) {
+  const done = results.filter((r): r is Result => Boolean(r));
+  const won = done.filter((r) => r.won).length;
+  const priced = done.filter((r) => r.pnl != null);
+  const net = Math.round(priced.reduce((n, r) => n + (r.pnl ?? 0), 0) * 100) / 100;
+  const anyWould = done.some((r) => !r.real);
+  return (
+    <div className="wl-sum" data-film="wl-summary">
+      <div><span className="label">{label}</span><b className="num">{results.length}</b></div>
+      <div><span className="label">Settled</span><b className="num">{done.length}</b></div>
+      <div><span className="label">{anyWould ? 'Would have won' : 'Won'}</span><b className="num up">{won}</b></div>
+      <div><span className="label">{anyWould ? 'Would have lost' : 'Lost'}</span><b className="num down">{done.length - won}</b></div>
+      <div className="wl-net">
+        <span className="label">Net P&amp;L{anyWould ? ' (would have)' : ''}</span>
+        <b className={`num ${tone(net)}`} data-film="wl-net">{priced.length ? `${signed(net)} USDC` : '—'}</b>
+      </div>
+      {anyWould && <p className="form-note">Dry-run rounds were not placed: P&amp;L is what each would have made at the price Predict quoted, settled at the Pyth price. Placed rounds use their real payouts.</p>}
+    </div>
+  );
+}
+
 function GhostTrades({ feed }: { feed: GhostFeed | null }) {
   const [all, setAll] = useState(false);
   if (!feed) return <State kind="loading" title="Reading the ghost’s trades…" />;
@@ -657,6 +700,8 @@ function GhostTrades({ feed }: { feed: GhostFeed | null }) {
       </State>
     );
   return (
+    <>
+    <Summary results={feed.trades.map(ghostResult)} label="Ghost rounds" />
     <table className="tbl" data-film="ghost-trades">
       <thead>
         <tr>
@@ -667,6 +712,7 @@ function GhostTrades({ feed }: { feed: GhostFeed | null }) {
           <th className="hide-sm">Odds</th>
           <th className="hide-sm">Steps</th>
           <th>Result</th>
+          <th>P&amp;L <i>USDC</i></th>
           <th className="hide-sm">Proof</th>
           <th className="hide-sm" />
         </tr>
@@ -690,11 +736,16 @@ function GhostTrades({ feed }: { feed: GhostFeed | null }) {
               <small>{t.steps.at(-1)?.tool}</small>
             </td>
             <td>
-              <span className={`st ${statusTone(t)}`}>
-                <i />
-                {t.status}
-              </span>
+              {ghostResult(t) ? (
+                <ResultPill r={ghostResult(t)} />
+              ) : (
+                <span className={`st ${statusTone(t)}`}>
+                  <i />
+                  {t.status}
+                </span>
+              )}
             </td>
+            <td className={`mono pnl-cell ${tone(ghostResult(t)?.pnl)}`} data-film="ghost-pnl">{signed(ghostResult(t)?.pnl ?? null)}</td>
             <td className="hide-sm">{t.leg?.digest ? <Tx digest={t.leg.digest} /> : <span className="dim small">{t.live ? '—' : 'not placed'}</span>}</td>
             <td className="acts hide-sm">
               <a className="btn btn-ghost btn-xs" href={`#/round/${encodeURIComponent(t.id)}`} onClick={(e) => e.stopPropagation()}>
@@ -704,7 +755,7 @@ function GhostTrades({ feed }: { feed: GhostFeed | null }) {
           </tr>,
           t.commentary || t.recap ? (
             <tr key={`${t.id}-say`} className="say-row" onClick={() => go(`/round/${t.id}`)}>
-              <td colSpan={9}>
+              <td colSpan={10}>
                 <span className="say" data-film="ghost-say">
                   <img src="/art/v2/eidolon2-ghost-smug.webp" alt="" aria-hidden />
                   {t.recap ?? t.commentary}
@@ -717,8 +768,8 @@ function GhostTrades({ feed }: { feed: GhostFeed | null }) {
       {feed.trades.length > 8 && (
         <tfoot>
           <tr>
-            <td colSpan={9}>
-              <button className="btn btn-ghost btn-sm" onClick={() => setAll((x) => !x)}>
+            <td colSpan={10}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setAll((x) => !x)} data-film="show-all">
                 {all ? 'Show the latest 8' : `Show all ${feed.trades.length} rounds`}
               </button>
             </td>
@@ -726,6 +777,7 @@ function GhostTrades({ feed }: { feed: GhostFeed | null }) {
         </tfoot>
       )}
     </table>
+    </>
   );
 }
 export const statusTone = (t: GhostTrade) => (t.won === true ? 'st-won' : t.won === false ? 'st-lost' : t.leg ? 'st-live' : /refus|no admissible|Setup/i.test(t.status) ? 'st-refused' : 'st-wait');
@@ -737,13 +789,17 @@ function Rounds({ rounds }: { rounds: Round[] }) {
         Call Up or Down above. Each signed round lands here with the ghost’s answer, the payout and the memory it leaves on Walrus.
       </State>
     );
+  const results = rounds.map((r): Result | null => (r.playerLeg?.pnl != null ? { won: r.playerLeg.pnl > 0, pnl: r.playerLeg.pnl, real: true } : null));
   return (
+    <>
+    <Summary results={results} label="Your rounds" />
     <table className="tbl" data-film="your-rounds">
       <thead>
         <tr>
           <th>Your call</th>
           <th>Strike <i>USD</i></th>
           <th>Stake <i>USDC</i></th>
+          <th>Result</th>
           <th>You <i>USDC</i></th>
           <th>Ghost <i>USDC</i></th>
           <th>Status</th>
@@ -760,7 +816,10 @@ function Rounds({ rounds }: { rounds: Round[] }) {
             </td>
             <td className="mono">{usd(r.strike)}</td>
             <td className="mono">{r.size.toFixed(2)}</td>
-            <td className={`mono ${tone(r.playerLeg?.pnl)}`}>{usdc(r.playerLeg?.pnl)}</td>
+            <td>
+              <ResultPill r={r.playerLeg?.pnl != null ? { won: r.playerLeg.pnl > 0, pnl: r.playerLeg.pnl, real: true } : null} />
+            </td>
+            <td className={`mono pnl-cell ${tone(r.playerLeg?.pnl)}`}>{signed(r.playerLeg?.pnl ?? null)}</td>
             <td className={`mono ${tone(r.ghost?.leg?.pnl)}`}>
               {r.ghost ? (r.ghost.leg?.pnl != null ? usdc(r.ghost.leg.pnl) : <SidePill side={r.ghost.side} />) : usdc(undefined)}
               {r.ghost && r.ghost.leg?.pnl == null && <small>{r.ghost.strike ? `${usd(r.ghost.strike)} · ` : ''}{r.ghost.size.toFixed(2)} USDC</small>}
@@ -786,6 +845,7 @@ function Rounds({ rounds }: { rounds: Round[] }) {
         ))}
       </tbody>
     </table>
+    </>
   );
 }
 
