@@ -6,6 +6,7 @@ export type Route =
   | { page: 'home' }
   | { page: 'trade'; tab: Tab }
   | { page: 'round'; id: string }
+  | { page: 'tx'; id: string }
   | { page: 'leaderboard' };
 export type Tab = 'ghost' | 'rounds' | 'memories' | 'habits';
 const TABS: Tab[] = ['ghost', 'rounds', 'memories', 'habits'];
@@ -16,6 +17,7 @@ export function parseRoute(hasAddress: boolean): Route {
   if (a === 'trade') return { page: 'trade', tab: TABS.includes(b as Tab) ? (b as Tab) : 'ghost' };
   if (a === 'round' && b) return { page: 'round', id: h.slice('round/'.length) };
   if (a === 'leaderboard') return { page: 'leaderboard' };
+  if (a === 'tx' && b) return { page: 'tx', id: b };
   if (a === 'home') return { page: 'home' };
   // Older links: #/arena, #/ghost, #/memories.
   if (a === 'arena') return { page: 'trade', tab: 'ghost' };
@@ -80,7 +82,19 @@ export function SidePill({ side, children }: { side: Side; children?: ReactNode 
     </span>
   );
 }
+/** Set once /status says the server runs on a LOCAL FORK: digests then open the in-app fork transaction page, not SuiScan. */
+let forkMode = false;
+export const setForkMode = (on: boolean) => {
+  forkMode = on;
+};
 export function Tx({ digest, label }: { digest: string; label?: string }) {
+  if (forkMode)
+    return (
+      <a className="tx tx-fork" href={`#/tx/${digest}`} title="LOCAL FORK transaction: not on SuiScan">
+        {label ?? short(digest)}
+        <i>fork</i>
+      </a>
+    );
   return (
     <a className="tx" href={suiscan(digest)} target="_blank" rel="noreferrer">
       {label ?? short(digest)}

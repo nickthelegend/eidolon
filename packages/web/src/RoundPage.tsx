@@ -118,7 +118,7 @@ function GhostRound({ t, live, now }: { t: GhostTrade; live: boolean; now: numbe
       <section className="order-sec">
         <h2>On Sui</h2>
         <dl className="facts">
-          <div><dt>Ghost order</dt><dd>{t.leg?.digest ? <Tx digest={t.leg.digest} /> : t.live ? 'not placed' : 'dry-run, nothing sent'}</dd></div>
+          <div><dt>Ghost order</dt><dd data-film="haunt-order-tx">{t.leg?.digest ? <Tx digest={t.leg.digest} /> : t.live ? 'not placed' : 'dry-run, nothing sent'}</dd></div>
           <div><dt>Payout</dt><dd>{t.leg?.payoutDigest ? <Tx digest={t.leg.payoutDigest} /> : '—'}</dd></div>
           <div><dt>P&amp;L</dt><dd className="num">{t.leg?.pnl != null ? `${usdc(t.leg.pnl)} USDC` : '—'}</dd></div>
         </dl>
@@ -176,12 +176,13 @@ function PlayerRound({ r }: { r: Round }) {
       <section className="order-sec">
         <h2>Proof</h2>
         <dl className="facts">
-          <div><dt>Your order</dt><dd><Tx digest={r.digest} /></dd></div>
-          <div><dt>Ghost’s answer</dt><dd>{r.ghost?.leg ? <Tx digest={r.ghost.leg.digest} /> : r.ghost?.status ?? '—'}</dd></div>
+          <div><dt>Your order</dt><dd data-film="player-order-tx"><Tx digest={r.digest} /></dd></div>
+          <div><dt>Ghost’s answer</dt><dd data-film="ghost-answer-tx">{r.ghost?.leg ? <Tx digest={r.ghost.leg.digest} /> : r.ghost?.status ?? '—'}</dd></div>
           <div><dt>Your payout</dt><dd>{r.playerLeg?.payoutDigest ? <Tx digest={r.playerLeg.payoutDigest} /> : '—'}</dd></div>
           <div><dt>Ghost payout</dt><dd>{r.ghost?.leg?.payoutDigest ? <Tx digest={r.ghost.leg.payoutDigest} /> : '—'}</dd></div>
           <div><dt>Memory on Walrus</dt><dd>{r.memoryBlobId ? <Blob id={r.memoryBlobId} /> : 'written after a verified payout'}</dd></div>
-          <div><dt>Memories the ghost recalled</dt><dd>{r.ghost?.recalledBlobIds.length ?? 0}</dd></div>
+          <div><dt>Memories the ghost recalled</dt><dd>{r.ghost?.recalledBlobIds.length ?? 0}{r.ghost?.seat ? ` · from public trader ${short(r.ghost.seat)} (LOCAL FORK stand-in)` : ''}</dd></div>
+          <div><dt>Round status</dt><dd>{r.status}</dd></div>
         </dl>
         {r.ghost && r.ghost.recalledBlobIds.length > 0 && (
           <ul className="blobs">

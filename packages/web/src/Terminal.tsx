@@ -27,6 +27,8 @@ export type TerminalProps = {
   reload: () => Promise<void>;
   tab: Tab;
   onViewAs: (address: string) => string;
+  /** LOCAL FORK only: the public trader whose real Walrus memories stand in for the fork-only wallet. */
+  seat?: string | null;
 };
 
 /** The next market to close for a cadence, with a few seconds left to trade. */
@@ -456,7 +458,7 @@ function GhostPanel(p: TerminalProps & { side: Side; market: Market | undefined;
     setBusy(true);
     setMsg('');
     try {
-      p.setFeed(await post<GhostFeed>('/haunt', { player: p.owner, on: !feed?.haunting, cadence: 5 }));
+      p.setFeed(await post<GhostFeed>('/haunt', { player: p.seat ?? p.owner, on: !feed?.haunting, cadence: 5 }));
     } catch (e) {
       setMsg(String((e as Error).message ?? e));
     } finally {
@@ -488,13 +490,18 @@ function GhostPanel(p: TerminalProps & { side: Side; market: Market | undefined;
           </div>
         </div>
 
+        {p.seat && (
+          <p className="seat-note" data-film="fork-seat">
+            <b>LOCAL FORK:</b> your seat is a fork-only wallet with no history, so the ghost reads public trader <span className="mono">{short(p.seat)}</span>’s real Walrus memories. Nothing is written to Walrus here.
+          </p>
+        )}
         <div className="gp-why" data-film="ghost-why">
           <span className="label">Why: what it recalled about you</span>
           {p.historyBusy && !history ? (
             <p className="dim">Reading this trader’s settled bets from Sui…</p>
           ) : p.historyError && !history ? (
             <p className="down">{p.historyError}</p>
-          ) : history && history.trades.length ? (
+          ) : history && (history.trades.length || history.profile.recalled) ? (
             <ul>
               <li>“{habitLine(history)}”</li>
               {size && <li>“{size}”</li>}
@@ -526,7 +533,7 @@ function GhostPanel(p: TerminalProps & { side: Side; market: Market | undefined;
         </div>
 
         <div className="gp-auto">
-          <button className={`btn btn-block ${feed?.haunting ? 'btn-ghost' : 'btn-accent'}`} disabled={busy || !history?.trades.length} onClick={toggle} data-film="haunt-toggle">
+          <button className={`btn btn-block ${feed?.haunting ? 'btn-ghost' : 'btn-accent'}`} disabled={busy || !(history?.trades.length || history?.profile.recalled)} onClick={toggle} data-film="haunt-toggle">
             <Icon name={feed?.haunting ? 'pause' : 'play'} size={15} />
             {busy ? 'One moment…' : feed?.haunting ? 'Stop it trading on its own' : 'Let it trade on its own'}
           </button>
@@ -700,7 +707,7 @@ function Rounds({ rounds }: { rounds: Round[] }) {
       </thead>
       <tbody>
         {[...rounds].reverse().map((r) => (
-          <tr key={r.digest} className="clickable" onClick={() => go(`/round/${r.digest}`)}>
+          <tr key={r.digest} className="clickable" onClick={() => go(`/round/${r.digest}`)} data-film="round-row">
             <td>
               <SidePill side={r.side} />
               <small>{r.cadence}-min · {hm(r.expiryMs).slice(0, 5)}</small>
@@ -708,11 +715,14 @@ function Rounds({ rounds }: { rounds: Round[] }) {
             <td className="mono">{usd(r.strike)}</td>
             <td className="mono">{r.size.toFixed(2)}</td>
             <td className={`mono ${tone(r.playerLeg?.pnl)}`}>{usdc(r.playerLeg?.pnl)}</td>
-            <td className={`mono ${tone(r.ghost?.leg?.pnl)}`}>{usdc(r.ghost?.leg?.pnl)}</td>
+            <td className={`mono ${tone(r.ghost?.leg?.pnl)}`}>
+              {r.ghost ? (r.ghost.leg?.pnl != null ? usdc(r.ghost.leg.pnl) : <SidePill side={r.ghost.side} />) : usdc(undefined)}
+              {r.ghost && r.ghost.leg?.pnl == null && <small>{r.ghost.strike ? `${usd(r.ghost.strike)} · ` : ''}{r.ghost.size.toFixed(2)} USDC</small>}
+            </td>
             <td>
-              <span className={`st ${r.status === 'settled' ? 'st-won' : 'st-wait'}`}>
+              <span className={`st ${r.status === 'settled' ? 'st-won' : r.ghost?.leg ? 'st-live' : 'st-wait'}`} title={r.status}>
                 <i />
-                {r.status}
+                {r.status.length > 40 ? r.status.split(' · ')[0] : r.status}
               </span>
             </td>
             <td className="links" onClick={(e) => e.stopPropagation()}>
@@ -890,7 +900,7 @@ function lesson(t: HistoricalTrade, all: HistoricalTrade[]) {
 function Habits(p: TerminalProps) {
   const h = p.history;
   if (!h) return <State kind={p.historyBusy ? 'loading' : 'empty'} title={p.historyBusy ? 'Reading habits…' : 'No history loaded'} />;
-  if (!h.trades.length) return <State kind="empty" title="No settled trades to read habits from yet" />;
+  if (!h.trades.length && !h.profile.recalled) return <State kind="empty" title="No settled trades to read habits from yet" />;
   const l = learn(h.trades);
   const lines: string[] = [];
   const sl = sizeLine(h);

@@ -20,7 +20,7 @@ export type Status = {
   setup: string[];
   mainnetWrites: boolean;
   /** Set only in LOCAL FORK mode: the fork checkpoint label and whether fork writes are enabled. */
-  fork?: { label?: string; writes?: boolean } | null;
+  fork?: { label?: string; writes?: boolean; seat?: string | null } | null;
 };
 
 export type GhostPreview = {
@@ -105,6 +105,8 @@ export type Round = {
     recalledBlobIds: string[];
     profile: GhostProfile;
     leg?: Leg;
+    /** LOCAL FORK only: the public trader whose Walrus memories stood in for the fork wallet's history. */
+    seat?: string;
   };
   settlement?: number;
 };

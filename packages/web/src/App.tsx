@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useCurrentAccount, useCurrentWallet, useDAppKit } from '@mysten/dapp-kit-react';
+import { useCurrentAccount, useCurrentWallet, useDAppKit, useWallets } from '@mysten/dapp-kit-react';
 import { ConnectButton } from '@mysten/dapp-kit-react/ui';
 import { DEMO_WALLET_NAME } from './demoWallet';
 import { api, avatarFor, post, short, type GhostFeed, type HistoryResponse, type Market, type PriceSample, type Round, type Status } from './api';
@@ -8,7 +8,8 @@ import { Board } from './components/Board';
 import Landing from './Landing';
 import Terminal from './Terminal';
 import RoundPage from './RoundPage';
-import { Icon, parseRoute, type Route } from './ui';
+import ForkTxPage from './ForkTxPage';
+import { Icon, parseRoute, setForkMode, type Route } from './ui';
 
 const ADDRESS = /^0x[0-9a-f]{64}$/i;
 const addressFromUrl = () => {
@@ -21,11 +22,24 @@ export function App() {
   const wallet = useCurrentWallet();
   const demoConnected = Boolean(account && wallet?.name === DEMO_WALLET_NAME);
   const dAppKit = useDAppKit();
+  const wallets = useWallets();
+  // ?connect=demo picks the server-held demo signer (only registered when the server enables it) without the wallet menu.
+  useEffect(() => {
+    if (account || new URLSearchParams(window.location.search).get('connect') !== 'demo') return;
+    const demo = wallets.find((w) => w.name === DEMO_WALLET_NAME);
+    if (demo) void dAppKit.connectWallet({ wallet: demo }).catch(() => {});
+  }, [wallets.length, account]);
   const [viewAddress, setViewAddress] = useState(addressFromUrl);
-  const owner = account?.address ?? (viewAddress || undefined);
+  const [status, setStatus] = useState<Status | null>(null);
+  setForkMode(Boolean(status?.fork));
+  const signer = account?.address;
+  const owner = signer ?? (viewAddress || undefined);
+  // LOCAL FORK only: a fork-only wallet has no history, so the server names a public trader whose real Walrus memories
+  // stand in for it. History, habits and the ghost's feed then read that seat; orders are still signed by the wallet.
+  const forkSeat = status?.fork?.seat ?? null;
+  const memOwner = signer && forkSeat ? forkSeat : owner;
   const readOnly = !account && Boolean(viewAddress);
   const [route, setRoute] = useState<Route>(() => parseRoute(Boolean(addressFromUrl())));
-  const [status, setStatus] = useState<Status | null>(null);
   const [markets, setMarkets] = useState<Market[]>([]);
   const [marketsLoaded, setMarketsLoaded] = useState(false);
   const [samples, setSamples] = useState<PriceSample[]>([]);
@@ -106,22 +120,22 @@ export function App() {
 
   // The ghost's own feed for this player: what it traded on its own, step by step.
   useEffect(() => {
-    if (!owner) return setFeed(null);
-    const load = () => api<GhostFeed>(`/ghost-feed?player=${owner}`).then(setFeed).catch(() => {});
+    if (!memOwner) return setFeed(null);
+    const load = () => api<GhostFeed>(`/ghost-feed?player=${memOwner}`).then(setFeed).catch(() => {});
     load();
     const t = setInterval(load, 10_000);
     return () => clearInterval(t);
-  }, [owner]);
+  }, [memOwner]);
 
   // The player's history, and the ghost built from it, load as soon as there is an address.
   async function loadHistory(keep = false) {
-    if (!owner) return;
+    if (!memOwner) return;
     setHistoryBusy(true);
     if (!keep) setHistoryError('');
     try {
       const next = markets.filter((m) => m.cadence === 5 && m.expiryMs > Date.now() + 5_000).sort((x, y) => x.expiryMs - y.expiryMs)[0];
       const q = new URLSearchParams({ limit: '20', side: 'up', ...(next ? { marketId: next.id } : {}) });
-      setHistory(await api<HistoryResponse>(`/history/${owner}?${q}`));
+      setHistory(await api<HistoryResponse>(`/history/${memOwner}?${q}`));
       setHistoryError('');
     } catch (e) {
       setHistoryError(String((e as Error).message ?? e));
@@ -131,8 +145,8 @@ export function App() {
   }
   useEffect(() => {
     setHistory(null);
-    if (owner && marketsLoaded) void loadHistory();
-  }, [owner, marketsLoaded]);
+    if (memOwner && marketsLoaded) void loadHistory();
+  }, [memOwner, marketsLoaded]);
 
   const mine = useMemo(() => rounds.filter((r) => r.player === owner?.toLowerCase()), [rounds, owner]);
   const forkMode = Boolean(status?.fork);
@@ -145,7 +159,7 @@ export function App() {
   }
 
   useEffect(() => {
-    document.title = route.page === 'home' ? 'Eidolon · Trade against your past self' : route.page === 'trade' ? 'Eidolon · Bitcoin Up or Down' : route.page === 'round' ? 'Eidolon · Round' : 'Eidolon · Leaderboard';
+    document.title = route.page === 'home' ? 'Eidolon · Trade against your past self' : route.page === 'trade' ? 'Eidolon · Bitcoin Up or Down' : route.page === 'round' ? 'Eidolon · Round' : route.page === 'tx' ? 'Eidolon · Fork transaction' : 'Eidolon · Leaderboard';
   }, [route.page]);
 
   const banners = (
@@ -187,9 +201,9 @@ export function App() {
           <a href="#/home">How it works</a>
         </nav>
         <div className="ahead-right">
-          <span className={`net ${live ? 'net-live' : ''}`} title="Whether this server sends real orders">
+          <span className={`net ${forkMode ? 'net-fork' : live ? 'net-live' : ''}`} data-film="network" title="Whether this server sends real orders">
             <i className="live" />
-            {live ? (forkMode ? 'Fork writes' : 'Live USDC') : 'Dry-run · Sui mainnet'}
+            {forkMode ? 'LOCAL FORK of Sui mainnet · no real funds' : live ? 'LIVE · Sui mainnet · real USDC' : 'LIVE · Sui mainnet · dry-run'}
           </span>
           {readOnly && (
             <span className="addr-pill" role="status" data-film="viewing">
@@ -227,9 +241,12 @@ export function App() {
           reload={() => loadHistory(true)}
           tab={route.tab}
           onViewAs={viewAs}
+          seat={signer && forkSeat ? forkSeat : null}
         />
       ) : route.page === 'round' ? (
         <RoundPage id={route.id} feed={feed} rounds={mine} now={now} />
+      ) : route.page === 'tx' ? (
+        <ForkTxPage digest={route.id} />
       ) : (
         <Board owner={owner} />
       )}
