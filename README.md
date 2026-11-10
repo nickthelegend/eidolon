@@ -23,28 +23,28 @@
    - `place_order`, from its own wallet when live writes are on
 
    It settles each round after expiry. Every step is logged and shown in the app's Ghost feed. Dry-run rounds also settle and are labelled "would have won/lost (not placed)".
-4. **You duel it.** When you call Higher or Lower in the Arena, the ghost takes the other side at the nearest strike Predict will price. The gap between the two strikes is a dead zone where you both lose.
+4. **You duel it.** When you call Up or Down on the market screen, the ghost takes the other side at the nearest strike Predict will price. The gap between the two strikes is a dead zone where you both lose.
 5. **Every round becomes a memory.** After a verified payout, the round is written back to Walrus and recalled next time.
 
 ## The app
 
-Screen designs were generated with ChatGPT, then built with only live data:
+A light trading terminal laid out like Polymarket's "Bitcoin Up or Down" page, built only from live data (art generated with ChatGPT):
 
 | Screen | What it shows |
 | --- | --- |
-| **Onboarding** | Connect a wallet, paste any Sui address, or meet a real mainnet trader's ghost. |
-| **Arena** | The live BTC price and countdown, and a live chart with your strike, the ghost's strike and the dead zone. Also the ghost's last calls, its taunt in your real numbers, and the Higher/Lower bet card. |
-| **Ghost** | Its autonomous trade feed with every tool step, what it learned about you (sizing after wins and losses, streak, best and worst trade, your P&L curve), and its record. |
-| **Memories** | Each trade as a glass tablet linked to its Walrus blob, with filters and the lesson the ghost took from it. |
+| **Home** | "Trade against your past self": paste an address (or leave it empty for a real public trader) and meet the ghost. A live preview of the market, live numbers, and the public ghost's latest round step by step. |
+| **Market** (`#/trade`) | A dark market bar (price to beat, current price, countdown, 1- or 5-minute market), a live chart with the price to beat, your strike, the ghost's strike and the dead zone, the **Up / Down** order panel, and **Your ghost**: what it will do (the other side, its strike and stake) and why, quoting the memories it recalled from Walrus. |
+| **Tabs below the chart** | **Ghost's trades** (its own rounds, each step and SuiScan link), **Your rounds**, **Memories** (each trade with its Walrus blob on Walruscan and the lesson the ghost took), **Habits** (what it learned, your P&L curve, you vs your ghost). |
+| **Round** (`#/round/<id>`) | One round in detail: every tool step from `recall_memories` to `place_order`, the recalled blobs, the result and the proof links. |
 | **Leaderboard** | Who beat their own ghost, from verified rounds only. |
 
 ## Try it
 
 1. Run `pnpm install && pnpm build && pnpm dev`, then open http://localhost:5173. No keys are needed to look around read-only.
-2. Click **Meet a real mainnet trader's ghost**, or open `http://localhost:5173/?as=0x7c9250467b7d7cc0aa2a9e76d06e9e8af313afa22285f1a3c314d749617b486e`. That's a public Predict trader whose owner is unknown; more are in [docs/DEMO-ADDRESSES.md](docs/DEMO-ADDRESSES.md). The view is read-only and signing controls are hidden.
+2. Click **Meet the ghost** with the address field empty, or open `http://localhost:5173/?as=0x7c9250467b7d7cc0aa2a9e76d06e9e8af313afa22285f1a3c314d749617b486e`. That's a public Predict trader whose owner is unknown; more are in [docs/DEMO-ADDRESSES.md](docs/DEMO-ADDRESSES.md). The view is read-only and signing controls are hidden.
 3. Eidolon reads that trader's settled trades from mainnet. With Walrus Memory configured, the ghost is rebuilt from their Walrus memories, and **Memories** links each blob on Walruscan.
-4. In the **Arena**, pick 1 or 5 minutes, Higher or Lower, and **Call it**. Predict's on-chain pricer quotes both sides and the order is simulated on mainnet. Nothing is sent unless live writes are on.
-5. On the **Ghost** screen, **Let it trade on its own** starts haunt mode for that address.
+4. On the **Market** screen, pick 1 or 5 minutes, **Up** or **Down**, and **Call it**. Predict's on-chain pricer quotes both sides and the order is simulated on mainnet. Nothing is sent unless live writes are on.
+5. In the **Your ghost** panel, **Let it trade on its own** starts haunt mode for that address. Its rounds land in **Ghost's trades**.
 6. To trade for real, set the keys in [BLOCKED.md](BLOCKED.md) and follow `MAINNET-RUNBOOK.md`. Without them the app says **Setup required** and never pretends.
 
 ## Proof
