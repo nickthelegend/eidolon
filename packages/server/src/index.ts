@@ -632,7 +632,9 @@ const server = createServer(async (req, res) => {
       if (!fork) throw new Error('Only on a LOCAL FORK: mainnet transactions are on SuiScan');
       // Read-only, from the fork itself (sui-fork serves gRPC): one transaction with its effects, events and balance changes.
       const c = chain();
-      const r: any = await c.client.core.getTransaction({ digest: forkTx[1], include: { transaction: true, effects: true, events: true, balanceChanges: true } });
+      // sui-fork can stall on some reads, so the page gets a readable error after 8 s instead of spinning.
+      const within = <T,>(p: Promise<T>, what: string) => Promise.race([p, new Promise<never>((_, no) => setTimeout(() => no(new Error(`The fork did not answer ${what} within 8 s`)), 8000))]);
+      const r: any = await within(c.client.core.getTransaction({ digest: forkTx[1], include: { transaction: true, effects: true, events: true } }), 'GetTransaction');
       const t = r.Transaction ?? r.FailedTransaction;
       if (!t) throw new Error('Transaction not found on the fork');
       const plain = (v: unknown): unknown => (typeof v === 'bigint' ? String(v) : v instanceof Uint8Array ? undefined : v);
@@ -645,7 +647,7 @@ const server = createServer(async (req, res) => {
         balanceChanges: (t.balanceChanges ?? []).map((b: any) => ({ owner: { AddressOwner: b.address }, coinType: b.coinType, amount: b.amount })),
         objectChanges: (t.effects?.changedObjects ?? []).map((o: any) => ({ type: 'changed', objectId: o.objectId })),
       }, (_k, v) => plain(v)));
-      respond(res, 200, { rpc: (await forkStatus(c.client)).label, tx: json });
+      respond(res, 200, { rpc: `LOCAL FORK of Sui mainnet @ ${fork}`, tx: json });
       return;
     }
     if (url.pathname === '/haunt' && req.method === 'POST') {
