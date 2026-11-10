@@ -1,10 +1,24 @@
 import { SuiGrpcClient } from '@mysten/sui/grpc';
 import { GrpcTransport } from '@protobuf-ts/grpc-transport';
+import type { RpcInterceptor } from '@protobuf-ts/runtime-rpc';
 import { ChannelCredentials } from '@grpc/grpc-js';
 import { rateLimit } from './throttle.js';
 import { FORK_SOURCE, forkClient, forkUrl } from './fork.js';
 // One limiter for the whole process: every Tatum client shares Tatum's free-plan budget of 3 requests a second.
 const tatumLimit = rateLimit(400);
+// Tatum credits can run out (HTTP 402 "You have used all your credits"). SUI_RPC_FALLBACK=public, or the first 402 a
+// Tatum call returns, sends every later read to the public Sui fullnode, labelled so /status never claims Tatum.
+export const PUBLIC_FALLBACK_LABEL = 'public Sui node (Tatum credits exhausted)' as const;
+const PUBLIC_FULLNODE = 'https://fullnode.mainnet.sui.io:443';
+let tatumExhausted = false;
+const usePublicFallback = (env = process.env) => env.SUI_RPC_FALLBACK === 'public' || tatumExhausted;
+const tatumWatch: RpcInterceptor = {
+  interceptUnary(next, method, input, options) {
+    const call = next(method, input, options);
+    call.response.catch((e: unknown) => { if (/HTTP status code 402/.test(String(e))) tatumExhausted = true; });
+    return call;
+  },
+};
 import { getConfig, PredictClient, snapStrike, type MarketDescriptor } from '@mysten/deepbook-v3/predict';
 
 export const USDC = '0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC';
@@ -23,10 +37,11 @@ export function chain(env = process.env) {
       config: getConfig('mainnet'),
     };
   }
-  const tatum = Boolean(env.TATUM_API_KEY);
+  const fallback = Boolean(env.TATUM_API_KEY) && usePublicFallback(env);
+  const tatum = Boolean(env.TATUM_API_KEY) && !fallback;
   const rpcUrl = tatum
     ? 'https://sui-mainnet-grpc.gateway.tatum.io'
-    : (env.EIDOLON_DEV_SUI_RPC ?? 'https://fullnode.mainnet.sui.io:443');
+    : fallback ? PUBLIC_FULLNODE : (env.EIDOLON_DEV_SUI_RPC ?? 'https://fullnode.mainnet.sui.io:443');
   const client = tatum
     ? new SuiGrpcClient({
         network: 'mainnet',
@@ -34,7 +49,7 @@ export function chain(env = process.env) {
           host: 'sui-mainnet-grpc.gateway.tatum.io:443',
           channelCredentials: ChannelCredentials.createSsl(),
           meta: { 'x-api-key': env.TATUM_API_KEY! },
-          interceptors: [tatumLimit],
+          interceptors: [tatumLimit, tatumWatch],
         }),
       })
     : new SuiGrpcClient({ network: 'mainnet', baseUrl: rpcUrl });
@@ -49,7 +64,7 @@ export function chain(env = process.env) {
     events,
     eventsSource: tatum ? ('public fullnode (Tatum blocks ListEvents)' as const) : ('same as reads' as const),
     predict: sdk,
-    rpc: tatum ? ('Tatum' as const) : ('dev RPC (not Tatum)' as const),
+    rpc: tatum ? ('Tatum' as const) : fallback ? PUBLIC_FALLBACK_LABEL : ('dev RPC (not Tatum)' as const),
     rpcUrl,
     config: getConfig('mainnet'),
   };

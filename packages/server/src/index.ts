@@ -273,7 +273,7 @@ const server = createServer(async (req, res) => {
     }
     if (url.pathname === '/status') {
       const forkInfo = fork ? await forkStatus(chain().client) : null;
-      let rpc = forkInfo ? forkInfo.label : process.env.TATUM_API_KEY ? 'Tatum' : 'dev RPC (not Tatum)';
+      let rpc: string = forkInfo ? forkInfo.label : chain().rpc;
       const { chainError, ghostBalance } = await swr('status-chain', 20_000, 120_000, async () => {
         let chainError: string | null = null;
         try {
@@ -1435,6 +1435,8 @@ setInterval(() => {
 }, 15_000).unref();
 for (const round of rounds.filter((r) => r.status !== 'settled' && r.status !== 'player refunded'))
   void watch(round);
+// A background chain error (e.g. Tatum HTTP 402) is logged, never fatal: requests keep answering with readable errors.
+process.on('unhandledRejection', (e) => console.error('Unhandled background error (server kept running):', safeError(e)));
 await initAnalyst(dataDir);
 server.listen(Number(process.env.EIDOLON_PORT ?? 8787), () =>
   console.log(`Eidolon server listening on ${process.env.EIDOLON_PORT ?? 8787}`),
