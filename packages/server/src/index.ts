@@ -1297,7 +1297,10 @@ async function haunt(h: Haunt, m: Awaited<ReturnType<typeof marketList>>[number]
       fee: 'the ghost’s Predict account has no USDC to cover this bet yet (it needs funding)',
       'entry-band': 'the strike moved outside the 15–50% entry band',
     };
-    step(t, 'quote', `Predict refuses: ${why[String(quote.refusal)] ?? quote.refusal}`, false);
+    // Refused only because the ghost's account is unfunded: Predict still priced the bet, so the round keeps that real price
+    // (what it would pay and cost) and its would-have P&L can be computed after settlement. Other refusals carry no price.
+    const priced = quote.refusal === 'fee' && Number.isFinite(quote.potentialPayout) && Number.isFinite(quote.totalDebit) && quote.potentialPayout > 0;
+    step(t, 'quote', `Predict refuses: ${why[String(quote.refusal)] ?? quote.refusal}${priced ? `. Predict's price: pays ${quote.potentialPayout.toFixed(2)} USDC if right, costs ${quote.totalDebit.toFixed(2)} USDC` : ''}`, false);
     t.status = `refused: ${quote.refusal}`;
     return saveGhostTrades();
   }

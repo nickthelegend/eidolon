@@ -656,7 +656,7 @@ type Result = { won: boolean; pnl: number | null; real: boolean };
 export function ghostResult(t: GhostTrade): Result | null {
   if (t.leg?.pnl != null) return { won: t.leg.pnl > 0, pnl: t.leg.pnl, real: true };
   if (t.won == null) return null;
-  const q = t.steps.find((s) => s.tool === 'quote' && s.ok)?.detail.match(/pays ([\d.]+) USDC if right, costs ([\d.]+) USDC/);
+  const q = t.steps.find((s) => s.tool === 'quote')?.detail.match(/pays ([\d.]+) USDC if right, costs ([\d.]+) USDC/);
   const pnl = q ? Math.round((t.won ? Number(q[1]) - Number(q[2]) : -Number(q[2])) * 100) / 100 : null;
   return { won: t.won, pnl, real: false };
 }
