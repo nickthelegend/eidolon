@@ -11,7 +11,7 @@ import { parseArgs } from 'node:util';
 import { fromBase64 } from '@mysten/sui/utils';
 import { keyFromEnvFile } from '../../core/src/fork.ts';
 
-const { values } = parseArgs({ options: { 'player-usdc': { type: 'string', default: '5' }, 'ghost-usdc': { type: 'string', default: '4.5' }, fork: { type: 'boolean', default: false } } });
+const { values } = parseArgs({ options: { 'player-usdc': { type: 'string', default: '5' }, 'ghost-usdc': { type: 'string', default: '4.5' }, fork: { type: 'boolean', default: false }, continue: { type: 'string' } } });
 const fork = values.fork;
 const file = resolve(import.meta.dirname, '../../..', fork ? '.env.fork' : '.env');
 const api = `http://127.0.0.1:${process.env.EIDOLON_PORT ?? (fork ? 8797 : 8787)}`;
@@ -33,7 +33,9 @@ if (fork ? !status.fork?.writes : status.fork) throw new Error(fork ? 'Server is
 if (!fork && !status.mainnetWrites) throw new Error('Live writes are off. Start the server with EIDOLON_ALLOW_MAINNET=I_ACKNOWLEDGE_REAL_USDC.');
 say('server', { rpc: status.rpc, memory: status.memoryNetwork });
 
-for (const [name, key, amount] of [['player', player, Number(values['player-usdc'])], ['ghost', ghost, Number(values['ghost-usdc'])]] as const) {
+// --continue <round 1 digest>: the accounts are funded and round 1 is already on chain, so skip both.
+const cont = values.continue;
+for (const [name, key, amount] of (cont ? [] : [['player', player, Number(values['player-usdc'])], ['ghost', ghost, Number(values['ghost-usdc'])]]) as any) {
   // Create the account on the first run; if it already exists, the create dry-run fails and a plain deposit is used.
   const deposit = (create: boolean) => call('/fund', { owner: key.toSuiAddress(), amount, create });
   let fund = await deposit(true).catch((e) => (/AlreadyExists/.test(String(e)) ? deposit(false) : Promise.reject(e)));
@@ -51,12 +53,17 @@ async function round(n: number, side: 'up' | 'down') {
   const plan = await call('/plan', { owner: player.toSuiAddress(), marketId: m.id, side, amount: 2, strike });
   if (!plan.transaction) throw new Error(`Round ${n} refused: ${plan.refusal ?? JSON.stringify(plan.dryRun)}`);
   const sent = await call('/execute', { bytes: plan.transaction, signature: await sign(player, plan.transaction) });
-  const r = await call('/rounds', { digest: sent.digest });
+  // A just-executed transaction can take a few seconds to be readable; retry the verification before giving up.
+  let r: any;
+  for (let i = 0; ; i++) {
+    try { r = await call('/rounds', { digest: sent.digest }); break; }
+    catch (e) { if (i >= 12 || !/not found/i.test(String(e))) throw e; await wait(3000); }
+  }
   say(`round ${n}: player ${side.toUpperCase()} at $${strike} for 2 USDC, market closes ${new Date(m.expiryMs).toISOString().slice(11, 19)} UTC`, scan(sent.digest));
   return r.digest as string;
 }
 
-const first = await round(1, 'up');
+const first = cont ?? (await round(1, 'up'));
 if (fork) {
   say('LOCAL FORK: funding and round 1 enqueue proven. The fork has no Predict keeper, so the rehearsal stops here.');
   process.exit(0);
