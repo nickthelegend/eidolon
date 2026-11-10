@@ -685,6 +685,7 @@ function Summary({ results, label }: { results: (Result | null)[]; label: string
         <span className="label">Net P&amp;L{anyWould ? ' (would have)' : ''}</span>
         <b className={`num ${tone(net)}`} data-film="wl-net">{priced.length ? `${signed(net)} USDC` : '—'}</b>
       </div>
+      {done.length > priced.length && <p className="form-note">{done.length - priced.length} settled round{done.length - priced.length === 1 ? '' : 's'} had no Predict price (Predict refused the quote), so {done.length - priced.length === 1 ? 'it has' : 'they have'} a result but no P&amp;L.</p>}
       {anyWould && <p className="form-note">Dry-run rounds were not placed: P&amp;L is what each would have made at the price Predict quoted, settled at the Pyth price. Placed rounds use their real payouts.</p>}
     </div>
   );
@@ -745,7 +746,10 @@ function GhostTrades({ feed }: { feed: GhostFeed | null }) {
                 </span>
               )}
             </td>
-            <td className={`mono pnl-cell ${tone(ghostResult(t)?.pnl)}`} data-film="ghost-pnl">{signed(ghostResult(t)?.pnl ?? null)}</td>
+            <td className={`mono pnl-cell ${tone(ghostResult(t)?.pnl)}`} data-film="ghost-pnl">
+              {signed(ghostResult(t)?.pnl ?? null)}
+              {ghostResult(t) && ghostResult(t)!.pnl == null && <small>no price: Predict didn't quote it</small>}
+            </td>
             <td className="hide-sm">{t.leg?.digest ? <Tx digest={t.leg.digest} /> : <span className="dim small">{t.live ? '—' : 'not placed'}</span>}</td>
             <td className="acts hide-sm">
               <a className="btn btn-ghost btn-xs" href={`#/round/${encodeURIComponent(t.id)}`} onClick={(e) => e.stopPropagation()}>
@@ -932,6 +936,7 @@ function Memories(p: TerminalProps) {
         )}
       </div>
       {msg && <p className="msg" role="status">{msg}</p>}
+      <Summary results={trades.map((t) => ({ won: t.pnl > 0, pnl: Math.round(t.pnl * 100) / 100, real: true }))} label="Their settled bets" />
       <div className="mem-grid">
         <table className="tbl">
           <thead>
@@ -940,6 +945,7 @@ function Memories(p: TerminalProps) {
               <th>Call</th>
               <th>Strike <i>USD</i></th>
               <th>Stake <i>USDC</i></th>
+              <th>Result</th>
               <th>P&amp;L <i>USDC</i></th>
               <th>Walrus blob</th>
             </tr>
@@ -953,7 +959,10 @@ function Memories(p: TerminalProps) {
                 </td>
                 <td className="mono">{usd(t.strike)}</td>
                 <td className="mono">{t.size.toFixed(2)}</td>
-                <td className={`mono ${tone(t.pnl)}`}>{usdc(t.pnl)}</td>
+                <td>
+                  <ResultPill r={{ won: t.pnl > 0, pnl: t.pnl, real: true }} />
+                </td>
+                <td className={`mono pnl-cell ${tone(t.pnl)}`}>{signed(Math.round(t.pnl * 100) / 100)}</td>
                 <td onClick={(e) => e.stopPropagation()}>{byFill[t.fillDigest] ? <Blob id={byFill[t.fillDigest]} /> : <span className="dim small">not on Walrus yet</span>}</td>
               </tr>
             ))}
