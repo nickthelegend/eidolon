@@ -80,7 +80,7 @@ Drafts are in [POST.md](POST.md). **Nick fills** the X or LinkedIn link after po
 
 ## Tatum account ID
 
-`6af1b0a07614eea902da0ee6` (Nick's Tatum account, given Nov 10).
+`6af33893e52876938f3277d2` (Eidolon's own Tatum account; each entry has its own).
 
 ## MEMWAL_AGENT_ID
 
