@@ -20,6 +20,7 @@ import {
 import { fromBase64, toBase64 } from '@mysten/sui/utils';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { createDemoSigner } from './demo-signer.js';
+import { analystReady, explain, initAnalyst } from './analyst.js';
 import { config as loadEnv } from 'dotenv';
 import { cost, decodeMoveAbort, describePredictError } from '@mysten/deepbook-v3/predict';
 
@@ -306,6 +307,10 @@ const server = createServer(async (req, res) => {
         mainnetWrites: mainnetLive(),
         fork: forkInfo && { ...forkInfo, writes: forkWrites('EIDOLON'), seat: forkSeat },
       });
+      return;
+    }
+    if (url.pathname === '/analyst') {
+      respond(res, 200, { ready: analystReady(), model: 'claude-haiku-5-5', setup: analystReady() ? null : 'Setup required: ANTHROPIC_API_KEY' });
       return;
     }
     if (url.pathname === '/prices') {
@@ -792,7 +797,15 @@ async function placeGhost(round: Round, hits: Hit[]) {
     status: 'recalled',
   };
   try {
-    round.ghost.line = await narrate(hits, { ...decision, size: round.ghost.size });
+    const g = round.ghost;
+    g.line = (
+      await explain(
+        `duel:${round.digest}`,
+        `Duel. The player called ${round.side === 'up' ? 'Up' : 'Down'} at $${round.strike.toLocaleString('en-US')} with ${round.size.toFixed(2)} USDC. ` +
+          `From ${decision.profile.recalled} recalled trades: they bet Up ${Math.round(decision.profile.upBias * 100)}% of the time and win ${Math.round(decision.profile.hitRate * 100)}%. ` +
+          `The policy decided: the ghost takes ${g.side === 'up' ? 'Up' : 'Down'} with ${g.size.toFixed(2)} USDC. Write the ghost's reply to the player.`,
+      )
+    ).text;
   } catch {
     /* narration is optional, policy is fixed */
   }
@@ -1107,6 +1120,10 @@ type GhostTrade = {
   leg?: Leg;
   settlement?: number;
   won?: boolean;
+  /** Claude Haiku's plain-words explanation of the policy's decision, generated once per round. */
+  commentary?: string;
+  /** Claude Haiku's recap once the round settled. */
+  recap?: string;
   createdAt: string;
 };
 type Haunt = { player: string; cadence: 1 | 5; since: string };
@@ -1243,6 +1260,21 @@ async function haunt(h: Haunt, m: Awaited<ReturnType<typeof marketList>>[number]
   // Predict refuses orders under 2 USDC, so a smaller habit size is raised to that minimum (still under the per-bet cap).
   t.size = Math.max(PREDICT_MIN_USDC, decision.size);
   step(t, 'size_bet', `${t.size.toFixed(2)} USDC${decision.size < PREDICT_MIN_USDC ? ` (your ${decision.size.toFixed(2)} average, raised to Predict's 2 USDC minimum)` : profile.hitRate < 0.5 ? ', sized up because you lose more than you win' : ', your own average size'}`);
+  // Claude only explains the decision above (side, strike, size); it can't change it.
+  try {
+    const n = t.profile.recalled;
+    const e = await explain(
+      `round:${t.id}`,
+      `Trader ${t.player.slice(0, 6)}...${t.player.slice(-4)}. Recalled ${n} settled trades from Walrus. They bet Up ${pctLabel(t.profile.upBias)} of the time and win ${pctLabel(t.profile.hitRate)} of their bets. ` +
+        `On this ${t.cadence}-minute Bitcoin market they would most likely bet ${t.playerSide === 'up' ? 'Up' : 'Down'}. ` +
+        `The policy decided: the ghost bets ${t.side === 'up' ? 'Up' : 'Down'} at $${t.strike!.toLocaleString('en-US')} (${pctLabel(t.probability ?? 0)} odds), stake ${t.size.toFixed(2)} USDC. ` +
+        `Write the ghost's comment to the trader. Start with "Analyzing your last ${n} trades...".`,
+    );
+    t.commentary = e.text;
+    step(t, 'explain', `Claude Haiku: ${e.text}`);
+  } catch (err) {
+    step(t, 'explain', safeError(err), false);
+  }
   const owner = ghostAddress();
   if (!owner) {
     step(t, 'quote', 'Setup required: EIDOLON_GHOST_KEY (the ghost’s own wallet)', false);
@@ -1347,6 +1379,18 @@ async function settleGhost(t: GhostTrade) {
           step(t, 'settle', `Pyth settled BTC at $${s.settlementPrice.toLocaleString('en-US')}; the ghost's ${t.side.toUpperCase()} at $${t.strike.toLocaleString('en-US')} ${t.won ? 'would have won' : 'would have lost'}${t.live ? '' : ' (dry-run, not placed)'}`);
         }
         t.status = t.won ? (t.live ? 'won' : 'would have won') : t.live ? 'lost' : 'would have lost';
+        await saveGhostTrades();
+        try {
+          const e = await explain(
+            `recap:${t.id}`,
+            `Round recap. The ghost bet ${t.side === 'up' ? 'Up' : 'Down'} at $${t.strike.toLocaleString('en-US')} with ${t.size.toFixed(2)} USDC${t.live ? '' : ' (dry-run: priced and simulated, not placed)'}. ` +
+              `Bitcoin settled at $${s.settlementPrice.toLocaleString('en-US')}, so the ghost ${t.status}. The trader would most likely have bet ${t.playerSide === 'up' ? 'Up' : 'Down'}. Write a one-sentence recap.`,
+          );
+          t.recap = e.text;
+          step(t, 'recap', `Claude Haiku: ${e.text}`);
+        } catch (err) {
+          step(t, 'recap', safeError(err), false);
+        }
         return saveGhostTrades();
       }
       await new Promise((r) => setTimeout(r, 10_000));
@@ -1370,6 +1414,7 @@ setInterval(() => {
 }, 15_000).unref();
 for (const round of rounds.filter((r) => r.status !== 'settled' && r.status !== 'player refunded'))
   void watch(round);
+await initAnalyst(dataDir);
 server.listen(Number(process.env.EIDOLON_PORT ?? 8787), () =>
   console.log(`Eidolon server listening on ${process.env.EIDOLON_PORT ?? 8787}`),
 );
