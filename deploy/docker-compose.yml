@@ -1,0 +1,50 @@
+# Eidolon on the hackathon VPS behind Coolify's Traefik (network "coolify"), same pattern as /opt/hk/nakama.
+# Server layout: /opt/hk/eidolon/.env (mode 600, copied from the Mac) and /opt/hk/eidolon/app (git archive of main).
+# Redeploy from the Mac: deploy/redeploy.sh. On the server:
+#   cd /opt/hk/eidolon/app && flock /opt/hk/.build.lock docker compose -f deploy/docker-compose.yml up -d --build
+# DRY-RUN ONLY: EIDOLON_ALLOW_MAINNET and DEMO_SIGNER are forced empty below. The ghost's haunt rounds are priced and
+# simulated with its own address but never signed or sent; player orders stop after the simulation.
+# Data: the server runs from packages/server and keeps rounds, ghost trades, haunts, the analyst cache (Claude lines,
+# generated once per key) and the chain history cache in packages/server/data, the named volume below.
+# CORS: the server answers every route with access-control-allow-origin: *.
+name: eidolon
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: hk-eidolon:latest
+    restart: unless-stopped
+    init: true
+    mem_limit: 512m
+    memswap_limit: 768m
+    cpus: 0.5
+    env_file:
+      - path: ../../.env
+        required: true
+    environment:
+      EIDOLON_PORT: "8787"
+      NODE_OPTIONS: --max-old-space-size=384
+      EIDOLON_ALLOW_MAINNET: ""
+      DEMO_SIGNER: ""
+    volumes:
+      - eidolon-data:/app/packages/server/data
+    networks: [coolify]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.hk-eidolon.rule=Host(`eidolon.201-18-198-162.sslip.io`)
+      - traefik.http.routers.hk-eidolon.entrypoints=https
+      - traefik.http.routers.hk-eidolon.tls=true
+      - traefik.http.routers.hk-eidolon.tls.certresolver=letsencrypt
+      - traefik.http.services.hk-eidolon.loadbalancer.server.port=8080
+volumes:
+  eidolon-data:
+networks:
+  coolify:
+    external: true

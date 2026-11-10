@@ -1,0 +1,21 @@
+# Keep secrets, local state and build output out of the build context (the context is the repo root).
+.env
+.env.*
+**/.env
+**/.env.*
+data/
+packages/server/data/
+packages/server/data-fork/
+data-fork/
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+.git/
+art-src/
+docs/
+packages/cli/src/
+*.log
+*.mp4
+*.mov
+*.webm
+CLAUDE.md

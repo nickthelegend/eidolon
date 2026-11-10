@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1
+# Eidolon on the VPS: the server (tsx, as on the Mac) and the built web app in one container. nginx on :8080 serves
+# packages/web/dist and proxies /api/* to the server on 127.0.0.1:8787 with the /api prefix stripped, exactly like
+# the Vite dev proxy, so the page and the API share one origin. No keys are baked in: they come from env_file at run time.
+# Build context is the repo root (see docker-compose.yml); Dockerfile.dockerignore beside this file keeps .env out.
+FROM node:22-bookworm-slim
+ENV CI=true COREPACK_ENABLE_DOWNLOAD_PROMPT=0 NODE_ENV=production
+RUN apt-get update && apt-get install -y --no-install-recommends nginx-light curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && corepack enable && corepack prepare pnpm@10.29.2 --activate
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
+COPY packages/core/package.json packages/core/
+COPY packages/server/package.json packages/server/
+COPY packages/web/package.json packages/web/
+COPY packages/cli/package.json packages/cli/
+RUN pnpm install --frozen-lockfile --prod=false --filter @eidolon/core --filter @eidolon/server --filter @eidolon/web --filter eidolon
+COPY packages/core packages/core
+COPY packages/server packages/server
+COPY packages/web packages/web
+# Emit only, no type check: the deploy ships what tsx runs on the Mac (type errors are caught there).
+# Fails if either output is missing.
+RUN cd packages/core && ./node_modules/.bin/tsc -p tsconfig.json --noCheck && test -f dist/index.js \
+ && cd ../web && ./node_modules/.bin/vite build && test -f dist/index.html
+COPY deploy/nginx.conf deploy/start.sh deploy/
+RUN chmod +x deploy/start.sh && mkdir -p packages/server/data && chown -R node:node packages/server/data
+USER node
+EXPOSE 8080
+CMD ["/app/deploy/start.sh"]
