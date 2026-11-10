@@ -133,7 +133,7 @@ export function App() {
     setHistoryBusy(true);
     if (!keep) setHistoryError('');
     try {
-      const next = markets.filter((m) => m.cadence === 5 && m.expiryMs > Date.now() + 5_000).sort((x, y) => x.expiryMs - y.expiryMs)[0];
+      const next = markets.filter((m) => m.cadence === 5 && m.expiryMs > Date.now() + 45_000).sort((x, y) => x.expiryMs - y.expiryMs)[0];
       const q = new URLSearchParams({ limit: '20', side: 'up', ...(next ? { marketId: next.id } : {}) });
       setHistory(await api<HistoryResponse>(`/history/${memOwner}?${q}`));
       setHistoryError('');

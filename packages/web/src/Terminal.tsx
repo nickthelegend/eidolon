@@ -31,9 +31,11 @@ export type TerminalProps = {
   seat?: string | null;
 };
 
-/** The next market to close for a cadence, with a few seconds left to trade. */
+/** Predict stops taking orders shortly before a market closes, so a market needs this much time left to be offered. */
+export const MIN_TIME_LEFT_MS = 45_000;
+/** The next market to close for a cadence that still takes orders. */
 export function nextMarket(markets: Market[], cadence: 1 | 5, now: number) {
-  return markets.filter((m) => m.cadence === cadence && m.expiryMs > now + 5_000).sort((x, y) => x.expiryMs - y.expiryMs)[0];
+  return markets.filter((m) => m.cadence === cadence && m.expiryMs > now + MIN_TIME_LEFT_MS).sort((x, y) => x.expiryMs - y.expiryMs)[0];
 }
 
 /** How far BTC moved over about the last five minutes of samples. */
@@ -56,7 +58,7 @@ export default function Terminal(p: TerminalProps) {
   const [strike, setStrike] = useState('');
   const [preview, setPreview] = useState<Plan | null>(null);
 
-  const market = p.markets.find((m) => m.id === marketId && m.expiryMs > p.now) ?? nextMarket(p.markets, p.markets.find((m) => m.id === marketId)?.cadence ?? 5, p.now) ?? nextMarket(p.markets, 1, p.now);
+  const market = p.markets.find((m) => m.id === marketId && m.expiryMs > p.now + MIN_TIME_LEFT_MS) ?? nextMarket(p.markets, p.markets.find((m) => m.id === marketId)?.cadence ?? 5, p.now) ?? nextMarket(p.markets, 1, p.now);
   useEffect(() => {
     if (market && market.id !== marketId) {
       setMarketId(market.id);
