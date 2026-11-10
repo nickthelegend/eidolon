@@ -63,6 +63,10 @@ The same policy already runs today on real on-chain history. Eidolon rebuilds an
 
 The project learned too. The first recorded take showed an empty ghost panel, so the ghost now comes from on-chain history when memory isn't configured. Rehearsals on a local fork of Sui mainnet showed that a 1 USDC order fails Predict's minimum once fees and whole lots are counted, so the demo uses 2 USDC. The first Walrus writes on mainnet showed that blobs take over 60 seconds to certify, so writes now wait up to 5 minutes, and history goes in as bulk jobs of 20.
 
+## What changed on Nov 10
+
+The ghost now has a voice and a schedule. A Claude Haiku analyst explains each round in plain words, recaps it after settlement and writes the ghost's reply in a duel; the deterministic rules still pick the side and size before Claude runs, and each text is generated once and cached. The ghost shows when it trades next ("Next round in…") and its running record, sends a notification when it analyses, places, answers or settles, and the chart is full size. Its memory is 113 Walrus mainnet memories across 4 public-trader namespaces. The app is live at https://eidolon.201-18-198-162.sslip.io in dry-run: real mainnet reads through Tatum, real Walrus recall, and haunt rounds that settle as "would have won" or "would have lost" because nothing is placed. The signed rounds, including the ghost answering a player from its own wallet, ran only on a local fork of Sui mainnet with no real money; no mainnet transaction with real funds has been made.
+
 ## What's next
 
 The funded mainnet run: fund the wallets, play one player round, then a second round where the ghost recalls the first from Walrus and bets against it. Until then, everything above is labelled live, fork-only or pending.

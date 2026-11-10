@@ -6,7 +6,16 @@
 - **Where it trades:** DeepBook Predict on Sui mainnet.
 - **Its memory:** Walrus Memory on mainnet (**113 memories stored**, see [Proof](#proof)).
 - **How it reads the chain:** Tatum's Sui gateway.
+- **Its analyst:** Claude Haiku (`claude-haiku-5-5`) explains each ghost round, recaps it after settlement and writes the duel reply. The rules pick the side and size first; each text is generated once and cached.
 - **Hackathon:** Total Recall (Tatum × Walrus Memory), track 01 Markets & Sports Prediction.
+- **Honest status:** no Sui mainnet transaction with real funds has been made. Signed rounds ran on a **LOCAL FORK of Sui mainnet**; the chain reads and the Walrus memories are real mainnet.
+
+## Live
+
+| What | Where |
+|---|---|
+| Web app + API on a VPS (**dry-run**) | https://eidolon.201-18-198-162.sslip.io. `/api/status` on Nov 10, 14:20 UTC: `rpc: "Tatum"`, `memoryNetwork: "Walrus mainnet"`, `mainnetWrites: false`; `/api/analyst`: ready, `claude-haiku-5-5`. Haunt mode runs there in dry-run, recalling a public trader's Walrus memories each round |
+| Round 4 film | `videos/eidolon/round4/eidolon-round4.mp4` (3:18, grokbot workspace); public link after upload |
 
 ## How the ghost works
 
@@ -106,20 +115,22 @@ Mainnet blobs took over 60 s to certify, so each write now waits up to 300 s (`a
 
 The fork has no Predict keeper and a frozen clock, so it shows no fill, no settlement, no automatic ghost placement and no Walrus write.
 
-## Status: what is live today vs pending keys
+## Status: what is live today vs pending
 
 | Piece | Today |
 | --- | --- |
-| Live Predict markets, quotes, entry-band checks, mainnet dry-runs | **Live** (read-only) |
+| Live Predict markets, quotes, entry-band checks, mainnet dry-runs | **Live** (read-only), hosted in dry-run |
 | Settled-trade history for any address, with payout math checked | **Live** (read-only) |
-| History-built ghost (side, size, counter-strike), labelled "Not on Walrus yet" when the address has no Walrus memories or memory is not configured | **Live** (read-only) |
-| Reads through Tatum's Sui gRPC gateway | **Live** when `TATUM_API_KEY` is set. Event scans use the public fullnode because Tatum blocks `ListEvents` |
-| Wallet signing, `/execute`, round registration | Proven on a **local fork only**. No signed round on mainnet yet |
-| Walrus Memory writes and recall on mainnet | **Live**: 31 memories (the event requires at least 10), recalled through `GET /ghost/:address`. See [Proof](#proof) |
-| Ghost built from Walrus recall in the web app | **Live**: with Walrus configured, the ghost's profile and decision come from the address's recalled memories, and the panel links the recalled blobs on Walruscan. Verified for `0x96ed1d73…2ccd2` (31 recalled) |
-| Ghost placed automatically against a player round | **PENDING**: needs hub funding for the ghost wallet `0x5b68d119…2d09` and a player fill on mainnet |
-| Funded player round on mainnet | **PENDING**: the demo signer `0x088c7e04…7544` is unfunded until hub funding |
-| Fill, settlement and payout reconciliation of an Eidolon round | **PENDING**: needs the first funded mainnet round |
+| Reads through Tatum's Sui gRPC gateway | **Live**: the hosted server reports `rpc: "Tatum"`. Event scans use the public fullnode because Tatum blocks `ListEvents` |
+| Walrus Memory writes and recall on mainnet | **Live: 113 memories** across 4 public-trader namespaces (the event requires at least 10). See [Proof](#proof) |
+| Ghost built from Walrus recall in the web app | **Live**: the panel links the recalled blobs on Walruscan |
+| Haunt mode: the ghost trades every 5-minute round on its own | **Live in dry-run** on the hosted server: "Next round in…", its running record and notifications; rounds settle as "would have won/lost (not placed)" |
+| Claude Haiku analyst (explain, recap, duel reply) | **Live** (`81fafe2`, `30cfcda`); missing `ANTHROPIC_API_KEY` shows "Setup required" |
+| Wallet signing, `/execute`, round registration | Proven on a **LOCAL FORK only** |
+| Ghost placed automatically against a player round | Proven on a **LOCAL FORK only** (`56cdf7b`). Round 4 fork digests: player Up `9RC1VHa7w4Nmb7SsX4AM7NFDup78VdD5pxcuDdfwLcNj`, ghost answer Down `2hVedk25Gcaugpo64QTrmh32jqSZyB9KEKWN99cP5Xuk`, haunt round Up `98SJvvHWxnDZonUE4QxGAKBAURmTjdCHDnV19cQYrHDM` (not on Suiscan). **PENDING** on mainnet |
+| Funded player round on mainnet; fill, settlement and payout reconciliation of an Eidolon round | **PENDING**: none sent. Needs Nick's yes to use real funds |
+| Tests | `pnpm test`: **12 passing** (core 10, server 2; Nov 10) |
+| Public repo, film link, social post | **PENDING**: Nick flips the repo public, uploads the film and posts |
 
 The Walrus blob IDs are in [Proof](#proof). After the funded mainnet run (one player round, then a second round with the ghost), this section will list its Suiscan links. Until then, nothing here claims an Eidolon trade.
 
@@ -127,7 +138,7 @@ Mainnet gRPC reads and a real enqueue simulation pass with the public developmen
 
 ## Film
 
-`videos/eidolon/eidolon-film-v3.mp4` (2:16, not public yet; the link goes here once it's uploaded). It writes a public trader's 7 settled trades to Walrus mainnet on camera (the certification wait is sped up and badged) and rebuilds the ghost from Walrus recall, with every read through Tatum. It shows real mainnet reads and dry-runs of a public address, with nothing signed, and says so on screen.
+`videos/eidolon/round4/eidolon-round4.mp4` (3:18, not public yet): live mainnet reads through Tatum, a public trader's Walrus memories, the Claude Haiku analyst, and the duel, the ghost's answer and a haunt round on the LOCAL FORK, badged on every scene. The earlier cut, `videos/eidolon/eidolon-film-v3.mp4` (2:16): It writes a public trader's 7 settled trades to Walrus mainnet on camera (the certification wait is sped up and badged) and rebuilds the ghost from Walrus recall, with every read through Tatum. It shows real mainnet reads and dry-runs of a public address, with nothing signed, and says so on screen.
 
 ## Run
 
