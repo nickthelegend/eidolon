@@ -3,24 +3,17 @@ import { useCurrentAccount, useCurrentWallet, useDAppKit } from '@mysten/dapp-ki
 import { ConnectButton } from '@mysten/dapp-kit-react/ui';
 import { DEMO_WALLET_NAME } from './demoWallet';
 import { api, avatarFor, post, short, type GhostFeed, type HistoryResponse, type Market, type PriceSample, type Round, type Status } from './api';
-import { Logo, Mark } from './components/Logo';
-import { Arena } from './components/Arena';
-import { GhostView } from './components/GhostView';
-import { Memories } from './components/Memories';
+import { Logo } from './components/Logo';
 import { Board } from './components/Board';
-import { Onboarding } from './components/Onboarding';
+import Landing from './Landing';
+import Terminal from './Terminal';
+import RoundPage from './RoundPage';
+import { Icon, parseRoute, type Route } from './ui';
 
 const ADDRESS = /^0x[0-9a-f]{64}$/i;
-export type View = 'arena' | 'ghost' | 'memories' | 'leaderboard';
-const VIEWS: { id: View; label: string; short: string }[] = [
-  { id: 'arena', label: 'Arena', short: 'Arena' },
-  { id: 'ghost', label: 'Ghost', short: 'Ghost' },
-  { id: 'memories', label: 'Memories', short: 'Memories' },
-  { id: 'leaderboard', label: 'Leaderboard', short: 'Ranks' },
-];
-const viewFromHash = (): View => {
-  const v = window.location.hash.replace('#/', '') as View;
-  return VIEWS.some((x) => x.id === v) ? v : 'arena';
+const addressFromUrl = () => {
+  const value = new URLSearchParams(window.location.search).get('as') ?? '';
+  return ADDRESS.test(value) ? value.toLowerCase() : '';
 };
 
 export function App() {
@@ -28,7 +21,10 @@ export function App() {
   const wallet = useCurrentWallet();
   const demoConnected = Boolean(account && wallet?.name === DEMO_WALLET_NAME);
   const dAppKit = useDAppKit();
-  const [view, setView] = useState<View>(viewFromHash);
+  const [viewAddress, setViewAddress] = useState(addressFromUrl);
+  const owner = account?.address ?? (viewAddress || undefined);
+  const readOnly = !account && Boolean(viewAddress);
+  const [route, setRoute] = useState<Route>(() => parseRoute(Boolean(addressFromUrl())));
   const [status, setStatus] = useState<Status | null>(null);
   const [markets, setMarkets] = useState<Market[]>([]);
   const [marketsLoaded, setMarketsLoaded] = useState(false);
@@ -40,28 +36,22 @@ export function App() {
   const [feed, setFeed] = useState<GhostFeed | null>(null);
   const [error, setError] = useState('');
   const [now, setNow] = useState(Date.now());
-  const [viewAddress, setViewAddress] = useState(() => {
-    const value = new URLSearchParams(window.location.search).get('as') ?? '';
-    return ADDRESS.test(value) ? value.toLowerCase() : '';
-  });
-  const owner = account?.address ?? (viewAddress || undefined);
-  const readOnly = !account && Boolean(viewAddress);
 
   useEffect(() => {
     const on = () => {
-      setView(viewFromHash());
-      window.scrollTo({ top: 0 });
+      const next = parseRoute(Boolean(new URLSearchParams(window.location.search).get('as')) || Boolean(account));
+      setRoute((prev) => {
+        if (prev.page !== next.page || (prev.page === 'round' && next.page === 'round' && prev.id !== next.id)) window.scrollTo({ top: 0 });
+        return next;
+      });
     };
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
-  }, []);
-  const go = (v: View) => {
-    window.location.hash = `/${v}`;
-  };
+  }, [account]);
 
   function viewAs(value: string) {
     const v = value.trim().toLowerCase();
-    if (v && !ADDRESS.test(v)) return 'Paste a 0x address with 64 hexadecimal characters';
+    if (v && !ADDRESS.test(v)) return 'Paste a 0x address with 64 hexadecimal characters.';
     setViewAddress(v);
     const url = new URL(window.location.href);
     if (v) url.searchParams.set('as', v);
@@ -81,6 +71,7 @@ export function App() {
         .then((x) => {
           setMarkets(x.markets);
           setMarketsLoaded(true);
+          setError('');
         })
         .catch((e) => setError(String(e.message ?? e)));
     const loadPrices = () => api<{ samples: PriceSample[] }>('/prices').then((x) => setSamples(x.samples)).catch(() => {});
@@ -131,6 +122,7 @@ export function App() {
       const next = markets.filter((m) => m.cadence === 5 && m.expiryMs > Date.now() + 5_000).sort((x, y) => x.expiryMs - y.expiryMs)[0];
       const q = new URLSearchParams({ limit: '20', side: 'up', ...(next ? { marketId: next.id } : {}) });
       setHistory(await api<HistoryResponse>(`/history/${owner}?${q}`));
+      setHistoryError('');
     } catch (e) {
       setHistoryError(String((e as Error).message ?? e));
     } finally {
@@ -145,123 +137,112 @@ export function App() {
   const mine = useMemo(() => rounds.filter((r) => r.player === owner?.toLowerCase()), [rounds, owner]);
   const forkMode = Boolean(status?.fork);
   const live = Boolean(status?.mainnetWrites || (forkMode && status?.fork?.writes));
+  const isFork = String(status?.rpc ?? '').includes('LOCAL FORK');
 
   async function signAndSend(transaction: string) {
     const signed = await dAppKit.signTransaction({ transaction });
     return post<{ digest: string }>('/execute', { bytes: signed.bytes, signature: signed.signature });
   }
 
-  return (
-    <div className={`shell view-${view}`}>
+  useEffect(() => {
+    document.title = route.page === 'home' ? 'Eidolon · Trade against your past self' : route.page === 'trade' ? 'Eidolon · Bitcoin Up or Down' : route.page === 'round' ? 'Eidolon · Round' : 'Eidolon · Leaderboard';
+  }, [route.page]);
+
+  const banners = (
+    <>
       {demoConnected && (
-        <div className="demo-signer-badge">
-          Demo signer · server-held demo key · {String(status?.rpc ?? '').includes('LOCAL FORK') ? 'LOCAL FORK of Sui mainnet · no real funds' : 'real mainnet funds'}
-        </div>
+        <p className="banner banner-demo" role="status">
+          Demo signer · server-held demo key · {isFork ? 'LOCAL FORK of Sui mainnet · no real funds' : 'real mainnet funds'}
+        </p>
       )}
-      <header className="nav">
+      {status && status.setup.length > 0 && (
+        <p className="banner banner-setup" role="status">
+          <Icon name="lock" size={14} />
+          <b>Setup required:</b> {status.setup.map((s) => s.replace('Setup required: ', '')).join(', ')}
+          <span className="dim"> · reads and dry-runs still work</span>
+        </p>
+      )}
+      {status?.chainError && <p className="banner" role="alert">Chain: {status.chainError}</p>}
+      {error && <p className="banner" role="alert">{error}</p>}
+    </>
+  );
+
+  if (route.page === 'home')
+    return (
+      <div className="site">
+        <a className="skip" href="#main">Skip to content</a>
+        {banners}
+        <Landing markets={markets} samples={samples} now={now} status={status} onViewAs={viewAs} />
+      </div>
+    );
+
+  return (
+    <div className="app">
+      <a className="skip" href="#main">Skip to content</a>
+      <header className="ahead">
         <Logo />
-        <nav className="tabs-nav" aria-label="Screens">
-          {VIEWS.map((v) => (
-            <a key={v.id} href={`#/${v.id}`} className={view === v.id ? 'on' : ''} aria-current={view === v.id ? 'page' : undefined}>
-              {v.label}
-            </a>
-          ))}
+        <nav className="ahead-nav" aria-label="App">
+          <a href="#/trade" aria-current={route.page === 'trade' ? 'page' : undefined}>Market</a>
+          <a href="#/leaderboard" aria-current={route.page === 'leaderboard' ? 'page' : undefined}>Leaderboard</a>
+          <a href="#/home">How it works</a>
         </nav>
-        <div className="nav-right">
-          <span className={`mode ${live ? 'mode-live' : ''}`} title="Whether this server sends real orders">
-            <i aria-hidden />
-            {live ? (forkMode ? 'Fork writes' : 'Live USDC') : 'Dry-run'}
+        <div className="ahead-right">
+          <span className={`net ${live ? 'net-live' : ''}`} title="Whether this server sends real orders">
+            <i className="live" />
+            {live ? (forkMode ? 'Fork writes' : 'Live USDC') : 'Dry-run · Sui mainnet'}
           </span>
           {readOnly && (
-            <span className="addr-pill" role="status">
-              <img className="avatar" src={avatarFor(owner!)} alt="" width={20} height={20} />
-              <span className="num">{short(owner!)}</span>
-              <span className="muted hide-sm">read-only</span>
+            <span className="addr-pill" role="status" data-film="viewing">
+              <img className="avatar" src={avatarFor(owner!)} alt="" width={22} height={22} />
+              <span className="mono">{short(owner!)}</span>
+              <span className="dim hide-sm">read-only</span>
               <button aria-label="Stop viewing this address" onClick={() => viewAs('')}>
-                ✕
+                <Icon name="x" size={14} />
               </button>
             </span>
           )}
           <ConnectButton />
         </div>
       </header>
-
-      {(status?.setup.length || status?.chainError || error) && (
-        <div className="notices">
-          {status && status.setup.length > 0 && (
-            <div className="notice notice-setup" role="status">
-              <b>Setup required</b>
-              {status.setup.map((s) => (
-                <code key={s}>{s.replace('Setup required: ', '')}</code>
-              ))}
-              <span className="muted">Reads and dry-runs work; real orders and Walrus writes stay off.</span>
-            </div>
-          )}
-          {status?.chainError && <div className="notice notice-error">Chain: {status.chainError}</div>}
-          {error && (
-            <div className="notice notice-error" role="alert">
-              {error}
-            </div>
-          )}
-        </div>
+      {banners}
+      {route.page === 'trade' ? (
+        <Terminal
+          owner={owner}
+          account={Boolean(account)}
+          readOnly={readOnly}
+          markets={markets}
+          marketsLoaded={marketsLoaded}
+          samples={samples}
+          now={now}
+          live={live}
+          fork={forkMode}
+          history={history}
+          historyBusy={historyBusy}
+          historyError={historyError}
+          feed={feed}
+          setFeed={setFeed}
+          rounds={mine}
+          status={status}
+          signAndSend={signAndSend}
+          reload={() => loadHistory(true)}
+          tab={route.tab}
+          onViewAs={viewAs}
+        />
+      ) : route.page === 'round' ? (
+        <RoundPage id={route.id} feed={feed} rounds={mine} now={now} />
+      ) : (
+        <Board owner={owner} />
       )}
-
-      <main className="stage-main">
-        {!owner && view !== 'leaderboard' ? (
-          <Onboarding onViewAs={viewAs} />
-        ) : view === 'arena' ? (
-          <Arena
-            owner={owner!}
-            account={Boolean(account)}
-            readOnly={readOnly}
-            markets={markets}
-            marketsLoaded={marketsLoaded}
-            samples={samples}
-            now={now}
-            live={live}
-            fork={forkMode}
-            history={history}
-            feed={feed}
-            rounds={mine}
-            signAndSend={signAndSend}
-            onGhost={() => go('ghost')}
-          />
-        ) : view === 'ghost' ? (
-          <GhostView owner={owner!} now={now} history={history} historyBusy={historyBusy} feed={feed} setFeed={setFeed} rounds={mine} status={status} onMemories={() => go('memories')} />
-        ) : view === 'memories' ? (
-          <Memories owner={owner!} readOnly={readOnly} history={history} historyBusy={historyBusy} historyError={historyError} status={status} reload={() => loadHistory(true)} />
-        ) : (
-          <Board owner={owner} />
-        )}
-      </main>
-
-      <footer className="foot">
-        <Mark size={18} />
-        <p>
-          Markets and settlement: DeepBook Predict on Sui mainnet, settled at the Pyth price at expiry. Memory: Walrus Memory mainnet. Chain reads:{' '}
-          {status?.rpc ?? 'loading'}. Every number comes from the chain or from recalled memories. Art and screen designs generated with ChatGPT.
-        </p>
+      <footer className="term-foot mono">
+        <span>
+          <i className="live" />
+          {status?.rpc ? `Chain reads: ${status.rpc}` : 'Connecting…'}
+        </span>
+        <span>Markets: DeepBook Predict · settled at the Pyth price</span>
+        <span>Memory: Walrus mainnet</span>
+        <a href="#/leaderboard">Leaderboard</a>
+        <span>Art generated with ChatGPT</span>
       </footer>
-
-      <nav className="tabbar" aria-label="Screens">
-        {VIEWS.map((v) => (
-          <a key={v.id} href={`#/${v.id}`} className={view === v.id ? 'on' : ''} aria-current={view === v.id ? 'page' : undefined} aria-label={v.label} title={v.label}>
-            <TabIcon id={v.id} />
-          </a>
-        ))}
-      </nav>
     </div>
-  );
-}
-
-function TabIcon({ id }: { id: View }) {
-  const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-  return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
-      {id === 'arena' && <path {...p} d="M4 20 20 4M14 4h6v6M4 4l6 6M14 14l6 6M4 20h4M20 20v-4" />}
-      {id === 'ghost' && <path {...p} d="M6 20V10a6 6 0 0 1 12 0v10l-3-2-3 2-3-2-3 2zM9.5 10.5h.01M14.5 10.5h.01" />}
-      {id === 'memories' && <path {...p} d="M4 7h16M4 12h16M4 17h16M7 4v16" />}
-      {id === 'leaderboard' && <path {...p} d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4" />}
-    </svg>
   );
 }
