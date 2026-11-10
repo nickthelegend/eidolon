@@ -55,7 +55,7 @@ What works today, with no keys: live markets, quotes and mainnet dry-runs; a set
 
 ## Repo link
 
-`https://github.com/nickthelegend/eidolon`: placeholder. **PENDING**: the repo isn't public yet. Nick must say yes before it's made public, and the event requires a public repo.
+https://github.com/nickthelegend/eidolon (secret scan passed Nov 10; Nick approved making it public, flipped to public before submitting).
 
 ## Demo video
 
@@ -63,7 +63,7 @@ What works today, with no keys: live markets, quotes and mainnet dry-runs; a set
 
 ## Blog post
 
-[docs/BLOG.md](docs/BLOG.md). **Nick fills** the URL of the published copy (the event requires a published post).
+https://github.com/nickthelegend/eidolon/blob/main/docs/BLOG.md
 
 ## Social post (bonus)
 
@@ -98,6 +98,6 @@ Solo: Nivesh Gajengi (Nick), GitHub `nickthelegend`.
 | Walrus Memory integrated | Live on mainnet with Eidolon's own delegate key; refuses with "Setup required" without keys |
 | Writing on mainnet, at least 10 memories | **Done**: 113 memories on Walrus mainnet across 4 public-trader namespaces (31 in the main one), recalled through `GET /history/:address` and `GET /ghost/:address` |
 | Tatum RPC for on-chain data | Live for reads and transactions with `TATUM_API_KEY`; events go through the public fullnode (Tatum blocks `ListEvents`) |
-| Published blog post | Draft in docs/BLOG.md; publishing is **PENDING** |
+| Published blog post | https://github.com/nickthelegend/eidolon/blob/main/docs/BLOG.md |
 | Working demo | Read-only mainnet demo and Walrus recall work; a signed mainnet round and automatic ghost placement are **PENDING** on hub funding (rehearsed on a local fork only) |
 | Public repo | **PENDING**: Nick's yes |
