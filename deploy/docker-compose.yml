@@ -25,8 +25,6 @@ services:
     environment:
       EIDOLON_PORT: "8787"
       NODE_OPTIONS: --max-old-space-size=384
-      # Tatum credits ran out on Nov 10 (HTTP 402): reads use the public Sui fullnode, labelled in /status. Remove once a funded TATUM_API_KEY is in ../../.env.
-      SUI_RPC_FALLBACK: public
       EIDOLON_ALLOW_MAINNET: ""
       DEMO_SIGNER: ""
     volumes:
