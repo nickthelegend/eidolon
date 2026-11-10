@@ -558,7 +558,8 @@ function GhostStatus({ feed, now }: { feed: GhostFeed | null; now: number }) {
   useEffect(() => {
     api<{ ready: boolean; setup: string | null }>('/analyst').then(setAnalyst).catch(() => setAnalyst({ ready: false, setup: 'Analyst status unavailable' }));
   }, []);
-  const called = feed?.trades.filter((t) => t.won != null) ?? [];
+  const live = feed?.mode === 'live';
+  const called = feed?.trades.filter((t) => t.won != null && (!live || t.live)) ?? [];
   const wins = called.filter((t) => t.won).length;
   const next = Math.ceil(now / 300_000) * 300_000;
   const latest = feed?.trades.find((t) => t.commentary);
@@ -669,7 +670,11 @@ function ResultPill({ r }: { r: Result | null }) {
   );
 }
 const signed = (n: number | null) => (n == null ? '—' : `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)}`);
-function Summary({ results, label }: { results: (Result | null)[]; label: string }) {
+function Summary({ results: all, label }: { results: (Result | null)[]; label: string }) {
+  const placed = all.filter((r): r is Result => Boolean(r?.real));
+  const dryOnly = all.filter((r) => r && !r.real).length;
+  const mixed = placed.length > 0 && dryOnly > 0;
+  const results = mixed ? placed : all;
   const done = results.filter((r): r is Result => Boolean(r));
   const won = done.filter((r) => r.won).length;
   const priced = done.filter((r) => r.pnl != null);
@@ -677,7 +682,7 @@ function Summary({ results, label }: { results: (Result | null)[]; label: string
   const anyWould = done.some((r) => !r.real);
   return (
     <div className="wl-sum" data-film="wl-summary">
-      <div><span className="label">{label}</span><b className="num">{results.length}</b></div>
+      <div><span className="label">{mixed ? `${label} placed` : label}</span><b className="num">{results.length}</b></div>
       <div><span className="label">Settled</span><b className="num">{done.length}</b></div>
       <div><span className="label">{anyWould ? 'Would have won' : 'Won'}</span><b className="num up">{won}</b></div>
       <div><span className="label">{anyWould ? 'Would have lost' : 'Lost'}</span><b className="num down">{done.length - won}</b></div>
@@ -686,6 +691,7 @@ function Summary({ results, label }: { results: (Result | null)[]; label: string
         <b className={`num ${tone(net)}`} data-film="wl-net">{priced.length ? `${signed(net)} USDC` : '—'}</b>
       </div>
       {done.length > priced.length && <p className="form-note">{done.length - priced.length} settled round{done.length - priced.length === 1 ? '' : 's'} had no Predict price (Predict refused the quote), so {done.length - priced.length === 1 ? 'it has' : 'they have'} a result but no P&amp;L.</p>}
+      {mixed && <p className="form-note">Only rounds placed with real money are counted here. {dryOnly} earlier dry-run round{dryOnly === 1 ? '' : 's'} (would have won or lost, not placed) are listed below but not counted.</p>}
       {anyWould && <p className="form-note">Dry-run rounds were not placed: P&amp;L is what each would have made at the price Predict quoted, settled at the Pyth price. Placed rounds use their real payouts.</p>}
     </div>
   );
