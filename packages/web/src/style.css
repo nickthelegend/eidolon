@@ -131,7 +131,7 @@ mysten-dapp-kit-connect-button::part(trigger) { background: var(--btn-bg); color
    TERMINAL
    ===================================================================== */
 .term { flex: 1; display: grid; gap: 10px; padding: 10px; grid-template-columns: minmax(0, 1fr) 372px; grid-template-areas: 'mbar form' 'chart form' 'ghost form' 'bottom form'; align-items: start; }
-.term-wide { grid-template-columns: minmax(0, 1fr) 330px 372px; grid-template-rows: auto 520px auto; grid-template-areas: 'mbar mbar form' 'chart ghost form' 'bottom bottom form'; }
+.term-wide { grid-template-columns: minmax(0, 1fr) 340px 372px; grid-template-rows: auto clamp(520px, calc(100vh - 250px), 640px) auto; grid-template-areas: 'mbar mbar form' 'chart ghost form' 'bottom bottom form'; }
 .term-empty { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'mbar' 'meet'; }
 .pnl { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; min-width: 0; box-shadow: var(--shadow); }
 
