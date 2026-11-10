@@ -71,7 +71,7 @@ Drafts are in [POST.md](POST.md). **Nick fills** the X or LinkedIn link after po
 
 ## Tatum account ID
 
-`<TATUM_ACCOUNT_ID>`: **Nick fills.**
+`6af1b0a07614eea902da0ee6` (Nick's Tatum account, given Nov 10).
 
 ## MEMWAL_AGENT_ID
 
