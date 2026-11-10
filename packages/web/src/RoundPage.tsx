@@ -160,7 +160,7 @@ function PlayerRound({ r }: { r: Round }) {
         </section>
         <section className="verdict dark">
           <span className="label">{r.status === 'settled' ? `Pyth close ${usd(r.settlement, 2)}` : 'Waiting for settlement'}</span>
-          <p className="verdict-big">{r.status !== 'settled' ? 'In play' : (you ?? 0) > (gh ?? -Infinity) ? 'You beat your ghost' : 'Your ghost beat you'}</p>
+          <p className="verdict-big">{r.status !== 'settled' ? 'In play' : gh == null ? ((you ?? 0) > 0 ? 'You won' : 'You lost') : (you ?? 0) > gh ? 'You beat your ghost' : 'Your ghost beat you'}</p>
           <div className="cross">
             <div>
               <span>You</span>
@@ -173,6 +173,7 @@ function PlayerRound({ r }: { r: Round }) {
             </div>
           </div>
           {r.ghost?.line && <p className="verdict-note">“{r.ghost.line}”</p>}
+          {r.status === 'settled' && gh == null && <p className="verdict-note">The ghost placed no bet against this round.</p>}
         </section>
       </div>
       <section className="order-sec">
