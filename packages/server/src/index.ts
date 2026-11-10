@@ -258,6 +258,8 @@ const server = createServer(async (req, res) => {
   try {
     if (await demoSigner(req, res)) return;
     const url = new URL(req.url ?? '/', 'http://localhost');
+    // Liveness only: no chain, memory or model calls.
+    if (url.pathname === '/health') { respond(res, 200, { ok: true }); return; }
     if (url.pathname === '/events') {
       res.writeHead(200, {
         'content-type': 'text/event-stream',
