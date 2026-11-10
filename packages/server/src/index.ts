@@ -296,7 +296,8 @@ const server = createServer(async (req, res) => {
         memoryNetwork: 'Walrus mainnet',
         ghostBalance,
         setup: [
-          missing('TATUM_API_KEY'),
+          // Fork mode refuses Tatum on purpose (reads go to the local fork), so it is not a missing setting there.
+          fork ? null : missing('TATUM_API_KEY'),
           missing('MEMWAL_MAINNET_KEY'),
           missing('MEMWAL_MAINNET_ACCOUNT_ID'),
           missing('EIDOLON_GHOST_KEY'),
