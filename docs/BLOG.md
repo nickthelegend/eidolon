@@ -71,4 +71,4 @@ The ghost now has a voice and a schedule. A Claude Haiku analyst explains each r
 
 The funded mainnet run: fund the wallets, play one player round, then a second round where the ghost recalls the first from Walrus and bets against it. Until then, everything above is labelled live, fork-only or pending.
 
-Code: `<repo link, public after Nick's yes>`. Film: `videos/eidolon/eidolon-film-v3.mp4` (link after upload).
+Code: https://github.com/nickthelegend/eidolon. Live app (dry-run): https://eidolon.201-18-198-162.sslip.io. Film: linked in the submission form.
