@@ -13,7 +13,7 @@ const STEP = 4; // the server samples the Predict forward every 4 s
  * Dashed lines: the price to beat, your strike and the ghost's strike. The hatched band between your strike
  * and the ghost's is the dead zone, where you both lose.
  */
-export default function Chart({ samples, expiryMs, lines, compact = false, minutes = 8 }: { samples: PriceSample[]; expiryMs: number | null; lines: StrikeLine[]; compact?: boolean; minutes?: number }) {
+export default function Chart({ samples, expiryMs, lines, compact = false, minutes = 30 }: { samples: PriceSample[]; expiryMs: number | null; lines: StrikeLine[]; compact?: boolean; minutes?: number }) {
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const series = useRef<ISeriesApi<'Area'> | null>(null);
@@ -28,7 +28,7 @@ export default function Chart({ samples, expiryMs, lines, compact = false, minut
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#6a6575', fontFamily: 'Space Mono, ui-monospace, monospace', fontSize: compact ? 10 : 11, attributionLogo: false },
       grid: { vertLines: { color: 'rgba(23,19,33,0.04)' }, horzLines: { color: 'rgba(23,19,33,0.06)' } },
       rightPriceScale: { borderColor: 'rgba(23,19,33,0.1)', scaleMargins: { top: 0.12, bottom: 0.1 } },
-      timeScale: { borderColor: 'rgba(23,19,33,0.1)', timeVisible: true, secondsVisible: !compact, rightOffset: 0, fixLeftEdge: true, fixRightEdge: true },
+      timeScale: { borderColor: 'rgba(23,19,33,0.1)', timeVisible: true, secondsVisible: false, rightOffset: 0, fixLeftEdge: true, fixRightEdge: true },
       crosshair: { mode: CrosshairMode.Normal, vertLine: { color: 'rgba(23,19,33,0.3)', labelBackgroundColor: INK }, horzLine: { color: 'rgba(23,19,33,0.3)', labelBackgroundColor: INK } },
       handleScroll: false,
       handleScale: false,
@@ -68,11 +68,14 @@ export default function Chart({ samples, expiryMs, lines, compact = false, minut
     const bySec = new Map<number, number>();
     for (const x of samples) if (x.at >= since) bySec.set(Math.floor(x.at / 1000), x.forward);
     const data: (AreaData | WhitespaceData)[] = [...bySec.entries()].sort((a, b) => a[0] - b[0]).map(([t, v]) => ({ time: t as UTCTimestamp, value: v }));
+    // Room up to the close, but never more than a fifth of the card: the price history fills the rest.
     const last = data.at(-1);
+    const room = Math.max(2, Math.floor(data.length / 4));
     if (last && expiryMs) {
       const end = Math.floor(expiryMs / 1000);
-      for (let t = (last.time as number) + STEP; t < end; t += STEP) data.push({ time: t as UTCTimestamp });
-      if (end > (last.time as number)) data.push({ time: end as UTCTimestamp });
+      let n = 0;
+      for (let t = (last.time as number) + STEP; t < end && n < room; t += STEP, n++) data.push({ time: t as UTCTimestamp });
+      if (end > (last.time as number) && (end - (last.time as number)) / STEP <= room) data.push({ time: end as UTCTimestamp });
     }
     s.setData(data);
     c.timeScale().fitContent();

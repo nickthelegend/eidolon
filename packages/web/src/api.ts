@@ -202,6 +202,10 @@ export type GhostTrade = {
   leg?: Leg & { recordId?: string };
   settlement?: number;
   won?: boolean;
+  /** Claude Haiku's explanation of the policy's decision (generated once per round, server-side). */
+  commentary?: string;
+  /** Claude Haiku's recap after the round settled. */
+  recap?: string;
   createdAt: string;
 };
 export type GhostFeed = {

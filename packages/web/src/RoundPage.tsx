@@ -9,7 +9,9 @@ const TOOL_WORDS: Record<string, string> = {
   pick_strike: 'Picked the opposite strike',
   size_bet: 'Sized its bet',
   quote: 'Got Predict’s price',
-  dry_run: 'Simulated the order on mainnet',
+  dry_run: 'Simulated the order',
+  explain: 'Claude Haiku explained the decision',
+  recap: 'Claude Haiku recapped the round',
   place_order: 'Placed the order from its own wallet',
   settle: 'Settled at the Pyth price',
 };
@@ -56,7 +58,7 @@ function GhostRound({ t, live, now }: { t: GhostTrade; live: boolean; now: numbe
             <div><dt>Your likely call</dt><dd>{sideWord(t.playerSide)}</dd></div>
             <div><dt>Started</dt><dd className="num">{hm(t.createdAt)}</dd></div>
             <div><dt>Market closes</dt><dd className="num">{hm(t.expiryMs)}</dd></div>
-            <div><dt>Mode</dt><dd>{t.live ? 'Live order' : 'Dry-run, not placed'}</dd></div>
+            <div><dt>Mode</dt><dd>{t.live ? 'Order placed' : 'Dry-run, not placed'}</dd></div>
             <div><dt>Market</dt><dd className="num"><a href={`https://suiscan.xyz/mainnet/object/${t.marketId}`} target="_blank" rel="noreferrer">{short(t.marketId)}</a></dd></div>
           </dl>
         </section>

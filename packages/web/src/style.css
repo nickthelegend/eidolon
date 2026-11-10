@@ -598,3 +598,32 @@ mysten-dapp-kit-connect-button::part(trigger) { background: var(--btn-bg); color
 .fork-badge { justify-self: start; font-family: var(--mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; padding: 5px 10px; border-radius: 8px; background: var(--accent); color: #fff; }
 .fork-digest { font-size: 15px; color: var(--accent-2); overflow-wrap: anywhere; }
 button.back { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; cursor: pointer; }
+
+/* ghost status: it trades every round on its own */
+.gstat { display: grid; gap: 10px; padding: 12px 14px; border-radius: 14px; background: radial-gradient(120% 160% at 100% 0%, rgba(255, 106, 40, .22), transparent 60%), var(--night); color: #f7f3ee; }
+.gstat .label { color: #b0a79f; }
+.gstat-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
+.gstat-row b { display: block; font-size: 26px; font-weight: 700; line-height: 1.1; color: #fff; }
+.gstat-row > div:last-child { text-align: right; }
+.gstat-row > div:last-child b { color: #d9f99d; }
+.gstat-say { font-size: 13px; line-height: 1.45; color: #f7f3ee; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.gstat-say .label { margin-bottom: 3px; }
+.gstat-say.down { color: #f07c7c; }
+/* ghost feed: Claude's line under each round */
+.tbl tr.say-row td { padding-top: 0; border-top: 0; white-space: normal; }
+.tbl tr.say-row:hover td { background: none; }
+.say { display: flex; gap: 8px; align-items: flex-start; max-width: 980px; font-size: 12.5px; line-height: 1.45; color: var(--muted); font-style: italic; }
+.say img { width: 20px; height: 20px; border-radius: 6px; background: var(--night); flex: none; }
+/* toasts */
+.toasts { position: fixed; right: 18px; bottom: 18px; z-index: 60; display: grid; gap: 8px; width: min(420px, calc(100vw - 32px)); }
+.toast { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; align-items: start; text-align: left; padding: 12px 14px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, .08); background: var(--night); color: #f7f3ee; box-shadow: 0 24px 48px -20px rgba(12, 10, 9, .6); cursor: pointer; }
+@media (prefers-reduced-motion: no-preference) { .toast { animation: up .35s var(--ease) both; } }
+@keyframes up { from { transform: translateY(16px); opacity: 0; } }
+.toast img { width: 40px; height: 40px; border-radius: 10px; }
+.toast b { display: flex; gap: 8px; align-items: center; font-size: 15px; }
+.toast small { display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #cfc6be; }
+.toast .icon { color: #b0a79f; margin-top: 4px; }
+.toast-act { border-left: 4px solid var(--ember); }
+.toast-won { border-left: 4px solid #4ccf94; }
+.toast-lost { border-left: 4px solid #f07c7c; }
+.toast-think { border-left: 4px solid #b0a79f; }

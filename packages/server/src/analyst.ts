@@ -27,7 +27,7 @@ export const cached = (key: string) => cache[key] ?? null;
 const SYSTEM =
   'You are the voice of a trading ghost in a Bitcoin Up/Down prediction game. A fixed policy has already made the decision; ' +
   'you only explain it, in plain words a non-trader understands. Use only the numbers given. Never invent numbers, never give advice, ' +
-  'never promise a result. Answer in at most two short sentences, first person, no emojis, no markdown.';
+  'never promise a result. Answer in at most two short sentences and under 35 words, first person, no emojis, no markdown.';
 
 /** Generate once per key; later calls (and concurrent ones) get the cached text. Throws "Setup required" without a key. */
 export async function explain(key: string, facts: string): Promise<Entry> {

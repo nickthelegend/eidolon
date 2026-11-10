@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ago, clockText, hm, humanError, learn, pct, post, short, usd, usdc, type FundingPlan, type GhostFeed, type GhostTrade, type HistoricalTrade, type HistoryResponse, type Market, type Plan, type PriceSample, type Round, type Side, type Status } from './api';
+import { ago, api, clockText, hm, humanError, learn, pct, post, short, usd, usdc, type FundingPlan, type GhostFeed, type GhostTrade, type HistoricalTrade, type HistoryResponse, type Market, type Plan, type PriceSample, type Round, type Side, type Status } from './api';
 import Chart, { type StrikeLine } from './Chart';
 import { Blob, Btc, Icon, SidePill, State, Tx, go, setTab, sideWord, useMedia, type Tab } from './ui';
 
@@ -340,7 +340,7 @@ function OrderPanel(
           <button className="btn btn-primary btn-block btn-lg" disabled={!market || busy !== null} onClick={quote} data-film="call-it">
             {busy === 'plan' ? (
               <>
-                <i className="spin" aria-hidden /> Pricing on mainnet…
+                <i className="spin" aria-hidden /> {p.fork ? 'Pricing on the fork…' : 'Pricing on mainnet…'}
               </>
             ) : (
               `Call it: ${sideWord(side)}`
@@ -478,6 +478,7 @@ function GhostPanel(p: TerminalProps & { side: Side; market: Market | undefined;
         </span>
       </header>
       <div className="gp-body">
+        <GhostStatus feed={feed} now={p.now} />
         <div className="gp-will" data-film="ghost-will">
           <img src={`/art/v2/eidolon2-ghost-${cracked ? 'cracked' : 'smug'}.webp`} alt="" width={56} height={56} aria-hidden />
           <div>
@@ -547,6 +548,39 @@ function GhostPanel(p: TerminalProps & { side: Side; market: Market | undefined;
         </div>
       </div>
     </section>
+  );
+}
+
+/** The ghost trades every round on its own: when it moves next, its running record, and what Claude Haiku said about its latest call. */
+function GhostStatus({ feed, now }: { feed: GhostFeed | null; now: number }) {
+  const [analyst, setAnalyst] = useState<{ ready: boolean; setup: string | null } | null>(null);
+  useEffect(() => {
+    api<{ ready: boolean; setup: string | null }>('/analyst').then(setAnalyst).catch(() => setAnalyst({ ready: false, setup: 'Analyst status unavailable' }));
+  }, []);
+  const called = feed?.trades.filter((t) => t.won != null) ?? [];
+  const wins = called.filter((t) => t.won).length;
+  const next = Math.ceil(now / 300_000) * 300_000;
+  const latest = feed?.trades.find((t) => t.commentary);
+  return (
+    <div className="gstat" data-film="ghost-status">
+      <div className="gstat-row">
+        <div>
+          <span className="label">{feed?.haunting ? 'Next round in' : 'Asleep · next round'}</span>
+          <b className="num" data-film="ghost-next">{clockText(next - now)}</b>
+        </div>
+        <div data-film="ghost-record">
+          <span className="label">{feed?.mode === 'live' ? 'Its record' : 'Would have won'}</span>
+          <b className="num">{called.length ? `${wins} of ${called.length}` : '—'}</b>
+        </div>
+      </div>
+      {analyst && !analyst.ready ? (
+        <p className="gstat-say down">{analyst.setup}</p>
+      ) : latest ? (
+        <p className="gstat-say" data-film="ghost-analysis">
+          <span className="label">Claude Haiku, on its latest call</span>“{latest.commentary}”
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -638,7 +672,7 @@ function GhostTrades({ feed }: { feed: GhostFeed | null }) {
         </tr>
       </thead>
       <tbody>
-        {(all ? feed.trades : feed.trades.slice(0, 8)).map((t) => (
+        {(all ? feed.trades : feed.trades.slice(0, 8)).map((t) => [
           <tr key={t.id} className="clickable" onClick={() => go(`/round/${t.id}`)} data-film="ghost-trade-row">
             <td className="mono">
               {hm(t.createdAt)}
@@ -667,8 +701,18 @@ function GhostTrades({ feed }: { feed: GhostFeed | null }) {
                 View
               </a>
             </td>
-          </tr>
-        ))}
+          </tr>,
+          t.commentary || t.recap ? (
+            <tr key={`${t.id}-say`} className="say-row" onClick={() => go(`/round/${t.id}`)}>
+              <td colSpan={9}>
+                <span className="say" data-film="ghost-say">
+                  <img src="/art/v2/eidolon2-ghost-smug.webp" alt="" aria-hidden />
+                  {t.recap ?? t.commentary}
+                </span>
+              </td>
+            </tr>
+          ) : null,
+        ])}
       </tbody>
       {feed.trades.length > 8 && (
         <tfoot>

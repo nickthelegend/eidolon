@@ -9,6 +9,7 @@ import Landing from './Landing';
 import Terminal from './Terminal';
 import RoundPage from './RoundPage';
 import ForkTxPage from './ForkTxPage';
+import { GhostToasts } from './GhostToasts';
 import { Icon, parseRoute, setForkMode, type Route } from './ui';
 
 const ADDRESS = /^0x[0-9a-f]{64}$/i;
@@ -250,6 +251,7 @@ export function App() {
       ) : (
         <Board owner={owner} />
       )}
+      <GhostToasts feed={feed} rounds={mine} />
       <footer className="term-foot mono">
         <span>
           <i className="live" />
