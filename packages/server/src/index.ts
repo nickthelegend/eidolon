@@ -630,15 +630,22 @@ const server = createServer(async (req, res) => {
     const forkTx = url.pathname.match(/^\/fork\/tx\/([1-9A-HJ-NP-Za-km-z]{32,44})$/);
     if (forkTx) {
       if (!fork) throw new Error('Only on a LOCAL FORK: mainnet transactions are on SuiScan');
-      // The fork's own JSON-RPC, read-only: one transaction with its effects, events and balance changes.
-      const r = await fetch(fork, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'sui_getTransactionBlock', params: [forkTx[1], { showInput: true, showEffects: true, showEvents: true, showBalanceChanges: true, showObjectChanges: true }] }),
-      });
-      const json: any = await r.json();
-      if (json.error) throw new Error(`Fork RPC: ${json.error.message ?? JSON.stringify(json.error)}`);
-      respond(res, 200, { rpc: (await forkStatus(chain().client)).label, tx: json.result });
+      // Read-only, from the fork itself (sui-fork serves gRPC): one transaction with its effects, events and balance changes.
+      const c = chain();
+      const r: any = await c.client.core.getTransaction({ digest: forkTx[1], include: { transaction: true, effects: true, events: true, balanceChanges: true } });
+      const t = r.Transaction ?? r.FailedTransaction;
+      if (!t) throw new Error('Transaction not found on the fork');
+      const plain = (v: unknown): unknown => (typeof v === 'bigint' ? String(v) : v instanceof Uint8Array ? undefined : v);
+      const json = JSON.parse(JSON.stringify({
+        digest: t.digest,
+        checkpoint: t.checkpoint,
+        transaction: { data: { sender: t.transaction?.sender } },
+        effects: { status: { status: t.effects?.status?.success ? 'success' : 'failure', error: t.effects?.status?.error?.message ?? undefined }, gasUsed: t.effects?.gasUsed },
+        events: (t.events ?? []).map((e: any) => ({ type: e.eventType, parsedJson: e.json })),
+        balanceChanges: (t.balanceChanges ?? []).map((b: any) => ({ owner: { AddressOwner: b.address }, coinType: b.coinType, amount: b.amount })),
+        objectChanges: (t.effects?.changedObjects ?? []).map((o: any) => ({ type: 'changed', objectId: o.objectId })),
+      }, (_k, v) => plain(v)));
+      respond(res, 200, { rpc: (await forkStatus(c.client)).label, tx: json });
       return;
     }
     if (url.pathname === '/haunt' && req.method === 'POST') {
