@@ -77,6 +77,8 @@ type Round = {
     line?: string;
     leg?: Leg;
     status: string;
+    /** LOCAL FORK only: the public trader whose real Walrus memories stood in for the fork-only player's history. */
+    seat?: string;
   };
   settlement?: number;
   memoryBlobId?: string;
@@ -180,6 +182,9 @@ async function save() {
 // EIDOLON_ALLOW_FORK_WRITES=LOCAL_FORK_ONLY. The mainnet gate is refused while a fork RPC is set.
 const fork = forkUrl('EIDOLON');
 const mainnetLive = () => !fork && process.env.EIDOLON_ALLOW_MAINNET === 'I_ACKNOWLEDGE_REAL_USDC';
+// LOCAL FORK only: fork-only wallets have no trade history and nothing may be written to Walrus during a fork run, so a
+// public trader's real Walrus memories stand in for the fork player's (EIDOLON_FORK_SEAT). Ignored outside fork mode.
+const forkSeat = fork && /^0x[0-9a-f]{64}$/i.test(process.env.EIDOLON_FORK_SEAT ?? '') ? process.env.EIDOLON_FORK_SEAT!.toLowerCase() : null;
 const writesOn = () => mainnetLive() || forkWrites('EIDOLON');
 if (process.env.DEMO_SIGNER === 'I_UNDERSTAND_SERVER_HOLDS_KEYS' && !fork)
   loadEnv({ path: new URL('../../../.env', import.meta.url), quiet: true });
@@ -298,7 +303,7 @@ const server = createServer(async (req, res) => {
           missing('OPENROUTER_API_KEY'),
         ].filter(Boolean),
         mainnetWrites: mainnetLive(),
-        fork: forkInfo && { ...forkInfo, writes: forkWrites('EIDOLON') },
+        fork: forkInfo && { ...forkInfo, writes: forkWrites('EIDOLON'), seat: forkSeat },
       });
       return;
     }
@@ -621,6 +626,20 @@ const server = createServer(async (req, res) => {
       void watch(round);
       return;
     }
+    const forkTx = url.pathname.match(/^\/fork\/tx\/([1-9A-HJ-NP-Za-km-z]{32,44})$/);
+    if (forkTx) {
+      if (!fork) throw new Error('Only on a LOCAL FORK: mainnet transactions are on SuiScan');
+      // The fork's own JSON-RPC, read-only: one transaction with its effects, events and balance changes.
+      const r = await fetch(fork, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'sui_getTransactionBlock', params: [forkTx[1], { showInput: true, showEffects: true, showEvents: true, showBalanceChanges: true, showObjectChanges: true }] }),
+      });
+      const json: any = await r.json();
+      if (json.error) throw new Error(`Fork RPC: ${json.error.message ?? JSON.stringify(json.error)}`);
+      respond(res, 200, { rpc: (await forkStatus(chain().client)).label, tx: json.result });
+      return;
+    }
     if (url.pathname === '/haunt' && req.method === 'POST') {
       const input = await body(req);
       const player = String(input.player ?? '').toLowerCase();
@@ -844,6 +863,39 @@ async function placeGhost(round: Round, hits: Hit[]) {
   };
   await save();
 }
+/**
+ * LOCAL FORK: the fork has no Predict keeper and a frozen clock, so a player's order is never filled or settled there.
+ * The ghost answers the enqueued order instead of the fill, from its own wallet, using the seat's real Walrus memories
+ * (or the player's own, if they have any). Nothing is written to Walrus.
+ */
+async function watchFork(round: Round) {
+  try {
+    round.status = 'enqueued on the LOCAL FORK · no keeper fills orders here';
+    await save();
+    if (!round.ghost && Date.now() < round.expiryMs - 10_000) {
+      if (!process.env.MEMWAL_MAINNET_KEY || !process.env.MEMWAL_MAINNET_ACCOUNT_ID) {
+        round.status = 'ghost blocked: memory setup required';
+        return save();
+      }
+      const own = await memoryFor(round.player).recall(round.context);
+      const who = own.some((h) => h.memory.kind === 'round') ? round.player : forkSeat;
+      const hits = who === round.player ? own : who ? await memoryFor(who).recall(round.context) : [];
+      if (!hits.some((h) => h.memory.kind === 'round')) {
+        round.status = 'first round: no past trade memory';
+        return save();
+      }
+      ghostQueue = ghostQueue.catch(() => {}).then(() => placeGhost(round, hits));
+      await ghostQueue;
+      const answer = round.ghost as Round['ghost']; // set by placeGhost
+      if (answer && who !== round.player) answer.seat = who!;
+      round.status = answer?.leg ? 'ghost answered on the LOCAL FORK · no keeper, so no fill or settlement' : 'ghost decision processed';
+      await save();
+    }
+  } catch (error) {
+    round.status = `watch error: ${safeError(error)}`;
+    await save();
+  }
+}
 async function paidLeg(
   c: ReturnType<typeof chain>,
   leg: Leg,
@@ -942,6 +994,7 @@ async function settle(round: Round, c: ReturnType<typeof chain>) {
   setTimeout(() => void watch(round), 30_000);
 }
 async function watch(round: Round) {
+  if (fork) return watchFork(round);
   try {
     const c = chain();
     const coords = { underlying: 'BTC', expiryMs: round.expiryMs, marketId: round.marketId };
