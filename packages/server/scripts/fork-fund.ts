@@ -14,8 +14,9 @@ const call = async (path: string, body?: unknown) => {
 };
 const status = await call('/status');
 if (!status.fork?.writes) throw new Error('Server is not in LOCAL FORK write mode');
-const usdc = Number(process.argv[2] ?? 6);
+const amounts: Record<string, number> = { EIDOLON_PLAYER_KEY: Number(process.argv[2] ?? 6), EIDOLON_GHOST_KEY: Number(process.argv[3] ?? process.argv[2] ?? 6) };
 for (const name of ['EIDOLON_PLAYER_KEY', 'EIDOLON_GHOST_KEY']) {
+  const usdc = amounts[name];
   const key = keyFromEnvFile(file, name);
   const owner = key.toSuiAddress();
   const fund = await call('/fund', { owner, amount: usdc, create: true });
